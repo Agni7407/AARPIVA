@@ -79,7 +79,7 @@ import { FormsModule } from '@angular/forms';
         <div class="listing">
           <div class="grid" *ngIf="displayProducts.length">
             <article class="card" *ngFor="let p of displayProducts; let i=index">
-              <a class="card-link" [routerLink]="productLink(p)">
+              <a class="card-link" [routerLink]="['/products', p.id]">
                 <div class="media">
                   <img [src]="image(p,i)" [alt]="p.name" (error)="imageError($event)">
                   <span class="tag" *ngIf="p.discountPrice">SALE</span>
