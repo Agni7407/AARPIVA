@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: aarpiva-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/SareeStore.Api/Dockerfile
+    dockerContext: ./backend/SareeStore.Api
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: FrontendUrl
+        sync: false
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: SareeStore.Api
+      - key: Jwt__Audience
+        value: SareeStore.Web
+      - key: Jwt__ExpiryMinutes
+        value: "120"
+      - key: Email__Mode
+        value: BrevoApi
+      - key: Email__FromName
+        value: AARPIVA
+      - key: Email__FromEmail
+        sync: false
+      - key: Brevo__ApiKey
+        sync: false
+      - key: Razorpay__KeyId
+        sync: false
+      - key: Razorpay__KeySecret
+        sync: false
+      - key: Razorpay__ApiBaseUrl
+        value: https://api.razorpay.com/v1

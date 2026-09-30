@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: sareestore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sareestore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - sareestore_pgdata:/var/lib/postgresql/data
+volumes:
+  sareestore_pgdata:

@@ -1,0 +1,34 @@
+:root{--ink:#111;--muted:#777;--line:#e3e0dc;--paper:#f7f5f1;--accent:#e6ddd4}*{box-sizing:border-box}html,body{margin:0;color:var(--ink);background:#fff;font-family:Arial,Helvetica,sans-serif}body{overflow-x:hidden}a{color:inherit;text-decoration:none}button,input,textarea,select{font-family:inherit}button{cursor:pointer}h1,h2,h3,h4,p{margin-top:0}.eyebrow{font-size:10px;letter-spacing:.2em;font-weight:800;text-transform:uppercase;color:#6c675e}.btn{display:inline-block;border:0}.dark{background:#111;color:#fff}.light{background:#eee;color:#111}
+
+/* AARPIVA responsive helpers */
+html{scroll-behavior:smooth}
+img{max-width:100%}
+button,.btn{touch-action:manipulation}
+
+
+/* AARPIVA mobile foundation */
+html,body{max-width:100%;overflow-x:hidden}
+button,a,input,select,textarea{max-width:100%}
+@media(max-width:600px){
+  body{font-size:14px}
+  img{height:auto}
+}
+@media(max-width:380px){
+  .topbar{display:none}
+}
+
+/* Mobile-first finishing touches */
+@media (max-width: 900px){
+  html{scroll-padding-top:76px}
+  body{padding-bottom:62px}
+}
+
+@media (max-width: 600px){
+  input,select,textarea{font-size:16px}
+  button,.btn,a{touch-action:manipulation}
+  .btn{min-height:48px}
+}
+
+@media (max-width: 380px){
+  body{font-size:13px}
+}

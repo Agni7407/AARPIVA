@@ -1,0 +1,24 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node / Angular
+**/node_modules/
+**/dist/
+**/.angular/
+**/.env
+**/.env.*
+!**/.env.example
+
+# .NET
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+**/appsettings.Local.json
+
+# Secrets / local overrides
+**/secrets*.json
+**/*local*.json
