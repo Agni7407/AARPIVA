@@ -16,6 +16,7 @@ public class AppUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<Address> Addresses { get; set; } = [];
     public List<Order> Orders { get; set; } = [];
+    public List<CartItem> CartItems { get; set; } = [];
 }
 
 public class EmailVerificationToken
@@ -65,6 +66,7 @@ public class Product
     public Category Category { get; set; } = null!;
     public List<ProductImage> Images { get; set; } = [];
     public List<OrderItem> OrderItems { get; set; } = [];
+    public List<CartItem> CartItems { get; set; } = [];
 }
 
 public class ProductImage
@@ -73,6 +75,18 @@ public class ProductImage
     public int ProductId { get; set; }
     public string ImageUrl { get; set; } = "";
     public bool IsPrimary { get; set; }
+    public Product Product { get; set; } = null!;
+}
+
+public class CartItem
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public AppUser User { get; set; } = null!;
     public Product Product { get; set; } = null!;
 }
 

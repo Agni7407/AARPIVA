@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Category, Product, Address, Order } from './models';
+import { Category, Product, Address, Order, CartItem } from './models';
 import { environment } from '../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
@@ -48,6 +48,30 @@ export class ApiService {
     return this.http.post(`${this.base}/auth/resend-otp`, { email });
   }
 
+  cart() {
+    return this.http.get<CartItem[]>(`${this.base}/cart`);
+  }
+
+  addCartItem(productId: number, quantity = 1) {
+    return this.http.post<CartItem>(`${this.base}/cart/items`, { productId, quantity });
+  }
+
+  updateCartItem(productId: number, quantity: number) {
+    return this.http.put<CartItem>(`${this.base}/cart/items/${productId}`, { quantity });
+  }
+
+  removeCartItem(productId: number) {
+    return this.http.delete(`${this.base}/cart/items/${productId}`);
+  }
+
+  clearCart() {
+    return this.http.delete(`${this.base}/cart`);
+  }
+
+  syncCart(items: Array<{ productId: number; quantity: number }>) {
+    return this.http.post<CartItem[]>(`${this.base}/cart/sync`, items);
+  }
+
   addresses() {
     return this.http.get<Address[]>(`${this.base}/account/addresses`);
   }
@@ -78,6 +102,10 @@ export class ApiService {
 
   createPaymentOrder(orderId: number) {
     return this.http.post<any>(`${this.base}/payments/create-order`, { orderId });
+  }
+
+  cancelPayment(orderId: number) {
+    return this.http.post(`${this.base}/payments/cancel`, { orderId });
   }
 
   verifyPayment(body: unknown) {

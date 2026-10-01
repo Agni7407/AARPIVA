@@ -1,9 +1,10 @@
 -- The EF Core model is the source of truth for Users, EmailVerificationTokens,
 -- EmailVerificationOtps, Categories, Products, ProductImages, Addresses,
--- Orders, OrderItems, Payments and ReturnRequests.
+-- Orders, OrderItems, Payments, ReturnRequests and CartItems.
 --
 -- V1 startup currently uses EnsureCreatedAsync() plus idempotent CREATE TABLE
--- statements for the two tables that were added after the original schema.
--- Before ongoing production schema evolution, introduce EF Core migrations and
--- deploy them as a controlled database change rather than changing the model and
--- relying on application startup to update an existing database.
+-- statements for the two tables that were added after the original schema,
+-- including CartItems. Before ongoing production schema evolution, introduce
+-- EF Core migrations and deploy them as a controlled database change rather
+-- than changing the model and relying on application startup to update an
+-- existing database.

@@ -13,10 +13,47 @@ public class PaymentsController(AppDbContext db, IRazorpayService razorpay, ICon
     [HttpPost("create-order")]
     public async Task<ActionResult> Create(CreateRazorpayOrderRequest req)
     {
-        var order=await db.Orders.FirstOrDefaultAsync(x=>x.Id==req.OrderId&&x.UserId==ApiHelper.UserId(User)); if(order is null)return NotFound(); if(order.PaymentStatus==PaymentStatus.Paid)return BadRequest("Order already paid.");
-        var (id, amount)=await razorpay.CreateOrderAsync((long)(order.TotalAmount*100m), $"order_{order.Id}"); order.RazorpayOrderId=id; if(order.Payment is null)order.Payment=new Payment{OrderId=order.Id,RazorpayOrderId=id,Amount=order.TotalAmount}; await db.SaveChangesAsync();
+        var order = await db.Orders.FirstOrDefaultAsync(x => x.Id == req.OrderId && x.UserId == ApiHelper.UserId(User));
+        if (order is null) return NotFound();
+        if (order.PaymentStatus == PaymentStatus.Paid) return BadRequest("Order already paid.");
+        if (order.PaymentStatus != PaymentStatus.Pending || order.Status != OrderStatus.Pending)
+            return BadRequest("This payment attempt is no longer active.");
+
+        var (id, amount) = await razorpay.CreateOrderAsync((long)(order.TotalAmount * 100m), $"order_{order.Id}");
+        order.RazorpayOrderId = id;
+        if (order.Payment is null)
+            order.Payment = new Payment { OrderId = order.Id, RazorpayOrderId = id, Amount = order.TotalAmount };
+        else
+        {
+            order.Payment.RazorpayOrderId = id;
+            order.Payment.Amount = order.TotalAmount;
+            order.Payment.Status = PaymentStatus.Pending;
+        }
+        await db.SaveChangesAsync();
         return Ok(new {keyId=cfg["Razorpay:KeyId"],razorpayOrderId=id,amount,currency="INR",orderId=order.Id});
     }
+    [HttpPost("cancel")]
+    public async Task<ActionResult> Cancel([FromBody] CancelPaymentRequest req)
+    {
+        var order = await db.Orders
+            .Include(x => x.Payment)
+            .FirstOrDefaultAsync(x => x.Id == req.OrderId && x.UserId == ApiHelper.UserId(User));
+
+        if (order is null) return NotFound("Order not found.");
+
+        // A successful payment always wins over a client-side cancel/close event.
+        if (order.PaymentStatus == PaymentStatus.Paid)
+            return Ok(new { message = "Payment has already been completed." });
+
+        order.PaymentStatus = PaymentStatus.Failed;
+        order.Status = OrderStatus.Cancelled;
+        if (order.Payment is not null)
+            order.Payment.Status = PaymentStatus.Failed;
+
+        await db.SaveChangesAsync();
+        return Ok(new { message = "Payment cancelled. Your items are still in your bag." });
+    }
+
     [HttpPost("verify")]
     public async Task<ActionResult> Verify(VerifyPaymentRequest req)
     {
@@ -26,7 +63,19 @@ public class PaymentsController(AppDbContext db, IRazorpayService razorpay, ICon
         var productIds = await db.OrderItems.Where(x => x.OrderId == order.Id).Select(x => new { x.ProductId, x.Quantity }).ToListAsync();
         var products = await db.Products.Where(x => productIds.Select(i => i.ProductId).Contains(x.Id)).ToListAsync();
         foreach (var line in productIds) { var p = products.First(x => x.Id == line.ProductId); if (p.Stock < line.Quantity) return BadRequest("One or more products went out of stock before payment confirmation."); p.Stock -= line.Quantity; }
-        order.PaymentStatus=PaymentStatus.Paid; order.Status=OrderStatus.Confirmed; if(order.Payment is null)order.Payment=new Payment{OrderId=order.Id,RazorpayOrderId=req.RazorpayOrderId,Amount=order.TotalAmount}; order.Payment.RazorpayPaymentId=req.RazorpayPaymentId; order.Payment.RazorpaySignature=req.RazorpaySignature; order.Payment.Status=PaymentStatus.Paid; await db.SaveChangesAsync();
+        order.PaymentStatus=PaymentStatus.Paid; order.Status=OrderStatus.Confirmed; if(order.Payment is null)order.Payment=new Payment{OrderId=order.Id,RazorpayOrderId=req.RazorpayOrderId,Amount=order.TotalAmount}; order.Payment.RazorpayPaymentId=req.RazorpayPaymentId; order.Payment.RazorpaySignature=req.RazorpaySignature; order.Payment.Status=PaymentStatus.Paid;
+
+        var orderedItems = await db.OrderItems.Where(x => x.OrderId == order.Id).Select(x => new { x.ProductId, x.Quantity }).ToListAsync();
+        foreach (var orderedItem in orderedItems)
+        {
+            var cartItem = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == order.UserId && x.ProductId == orderedItem.ProductId);
+            if (cartItem is null) continue;
+            cartItem.Quantity -= orderedItem.Quantity;
+            cartItem.UpdatedAt = DateTime.UtcNow;
+            if (cartItem.Quantity <= 0) db.CartItems.Remove(cartItem);
+        }
+
+        await db.SaveChangesAsync();
         var notificationOrder = await db.Orders.Include(x=>x.User).Include(x=>x.Items).Include(x=>x.Address).FirstAsync(x=>x.Id==order.Id);
         await notifications.SendPaymentSuccessAsync(notificationOrder);
         return Ok(new {message="Payment verified successfully."});

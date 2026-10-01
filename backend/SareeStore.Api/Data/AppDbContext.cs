@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -24,6 +25,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Product>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<EmailVerificationToken>().HasIndex(x => x.TokenHash).IsUnique();
         b.Entity<EmailVerificationOtp>().HasIndex(x => new { x.UserId, x.Used, x.ExpiresAt });
+        b.Entity<CartItem>().HasIndex(x => new { x.UserId, x.ProductId }).IsUnique();
+        b.Entity<CartItem>().HasOne(x => x.User).WithMany(x => x.CartItems).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<CartItem>().HasOne(x => x.Product).WithMany(x => x.CartItems).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<EmailVerificationOtp>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Product>().Property(x => x.Price).HasPrecision(12, 2);
         b.Entity<Product>().Property(x => x.DiscountPrice).HasPrecision(12, 2);

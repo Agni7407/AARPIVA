@@ -18,21 +18,33 @@ public class OrdersController(AppDbContext db, INotificationService notification
         var address = await db.Addresses.FirstOrDefaultAsync(x => x.Id == req.AddressId && x.UserId == userId);
         if (address is null) return BadRequest("Invalid shipping address.");
 
-        var ids = req.Items.Select(x => x.ProductId).Distinct().ToList();
-        var products = await db.Products.Where(x => ids.Contains(x.Id) && x.IsActive).ToListAsync();
-        if (products.Count != ids.Count) return BadRequest("One or more products are unavailable.");
+        var cartItems = await db.CartItems
+            .Where(x => x.UserId == userId)
+            .Include(x => x.Product)
+            .ToListAsync();
+
+        if (cartItems.Count == 0) return BadRequest("Your bag is empty.");
 
         var order = new Order { UserId = userId, AddressId = address.Id };
-        foreach (var line in req.Items)
+        foreach (var line in cartItems)
         {
-            var p = products.Single(x => x.Id == line.ProductId);
+            var p = line.Product;
+            if (!p.IsActive) return BadRequest($"{p.Name} is no longer available.");
             if (p.Stock < line.Quantity) return BadRequest($"Insufficient stock for {p.Name}.");
+
             var price = p.DiscountPrice ?? p.Price;
-            order.Items.Add(new OrderItem { ProductId = p.Id, ProductName = p.Name, UnitPrice = price, Quantity = line.Quantity });
+            order.Items.Add(new OrderItem
+            {
+                ProductId = p.Id,
+                ProductName = p.Name,
+                UnitPrice = price,
+                Quantity = line.Quantity
+            });
             order.TotalAmount += price * line.Quantity;
         }
 
         if (order.TotalAmount < 1499m) order.TotalAmount += 99m;
+
         db.Orders.Add(order);
         await db.SaveChangesAsync();
         return Ok(await ToResponse(order.Id));
@@ -43,7 +55,7 @@ public class OrdersController(AppDbContext db, INotificationService notification
     {
         var userId = ApiHelper.UserId(User);
         var orders = await db.Orders
-            .Where(x => x.UserId == userId)
+            .Where(x => x.UserId == userId && (x.PaymentStatus == PaymentStatus.Paid || x.PaymentStatus == PaymentStatus.Refunded))
             .Include(x => x.Items)
             .Include(x => x.Address)
             .OrderByDescending(x => x.CreatedAt)
@@ -57,7 +69,8 @@ public class OrdersController(AppDbContext db, INotificationService notification
     [HttpGet("{id:int}")]
     public async Task<ActionResult> One(int id)
     {
-        var o = await db.Orders.Where(x => x.Id == id && x.UserId == ApiHelper.UserId(User))
+        var o = await db.Orders
+            .Where(x => x.Id == id && x.UserId == ApiHelper.UserId(User) && (x.PaymentStatus == PaymentStatus.Paid || x.PaymentStatus == PaymentStatus.Refunded))
             .Include(x => x.Items).Include(x => x.Address).FirstOrDefaultAsync();
         if (o is null) return NotFound();
         var returns = await db.ReturnRequests.Where(x => x.OrderId == id).Include(x => x.OrderItem).ToListAsync();

@@ -16,9 +16,9 @@ declare const Razorpay:any;
     <section class="section">
       <div class="eyebrow">CHECKOUT</div><h1>Almost yours.</h1>
       <div *ngIf="!auth.isLogged()" class="notice">Please <a routerLink="/login">login</a> before checkout.</div>
-      <div *ngIf="auth.isLogged() && !cart.items.length" class="notice">Your bag is empty. <a routerLink="/products">Shop products</a>.</div>
+      <div *ngIf="auth.isLogged() && cart.ready && !cart.items.length" class="notice">Your bag is empty. <a routerLink="/products">Shop products</a>.</div>
 
-      <div *ngIf="auth.isLogged() && cart.items.length" class="checkout">
+      <div *ngIf="auth.isLogged() && cart.ready && cart.items.length" class="checkout">
         <div>
           <h2>Shipping address</h2>
           <div class="addresses" *ngIf="addresses.length; else noSavedAddress">
@@ -188,17 +188,99 @@ export class CheckoutComponent{
   }
 
   pay(){
-    if(!this.selectedAddress||!this.cart.items.length)return;
+    if(!this.selectedAddress||!this.cart.ready||!this.cart.items.length||this.placing)return;
+
     this.placing=true;
-    this.api.createOrder({addressId:this.selectedAddress,items:this.cart.items.map(x=>({productId:x.productId,quantity:x.quantity}))}).subscribe({
-      next:o=>this.api.createPaymentOrder(o.id).subscribe({
-        next:r=>{
-          if(typeof Razorpay==='undefined'){this.placing=false;alert('Razorpay checkout is not loaded. Add the Razorpay checkout script to src/index.html.');return;}
-          const options={key:r.keyId,amount:r.amount,currency:r.currency,name:'AARPIVA',description:`Order #${o.id}`,order_id:r.razorpayOrderId,handler:(response:any)=>this.api.verifyPayment({orderId:o.id,razorpayOrderId:response.razorpay_order_id,razorpayPaymentId:response.razorpay_payment_id,razorpaySignature:response.razorpay_signature}).subscribe({next:()=>{this.cart.clear();this.router.navigateByUrl('/orders')},error:e=>{this.placing=false;alert(e.error||'Payment verification failed')}}),modal:{ondismiss:()=>this.placing=false},prefill:{name:this.auth.get()?.name,email:this.auth.get()?.email},theme:{color:'#111'}};
-          new Razorpay(options).open();
-        },error:e=>{this.placing=false;alert(e.error||'Unable to create payment')}
-      }),
-      error:e=>{this.placing=false;alert(e.error||'Unable to create order')}
+    let paymentCompleted=false;
+
+    let oId:number|null=null;
+
+    const cancelDraft = (message='Payment cancelled. Your items are still in your bag.') => {
+      if (!oId) {
+        this.placing=false;
+        alert(message);
+        return;
+      }
+
+      this.api.cancelPayment(oId).subscribe({
+        next:()=>{
+          this.placing=false;
+          this.cart.refresh();
+          alert(message);
+        },
+        error:()=>{
+          // Even if cancellation reconciliation fails, never clear the cart.
+          this.placing=false;
+          this.cart.refresh();
+          alert(message);
+        }
+      });
+    };
+
+    this.api.createOrder({addressId:this.selectedAddress}).subscribe({
+      next:o=>{
+        oId=o.id;
+
+        this.api.createPaymentOrder(o.id).subscribe({
+          next:r=>{
+            if(typeof Razorpay==='undefined'){
+              cancelDraft('Payment could not be opened because Razorpay was not loaded. Your items are still in your bag.');
+              return;
+            }
+
+            const options={
+              key:r.keyId,
+              amount:r.amount,
+              currency:r.currency,
+              name:'AARPIVA',
+              description:`Order #${o.id}`,
+              order_id:r.razorpayOrderId,
+              handler:(response:any)=>{
+                paymentCompleted=true;
+                this.api.verifyPayment({
+                  orderId:o.id,
+                  razorpayOrderId:response.razorpay_order_id,
+                  razorpayPaymentId:response.razorpay_payment_id,
+                  razorpaySignature:response.razorpay_signature
+                }).subscribe({
+                  next:()=>{
+                    this.placing=false;
+                    this.cart.refresh();
+                    this.router.navigateByUrl('/orders');
+                  },
+                  error:e=>{
+                    this.placing=false;
+                    alert(e.error?.message||e.error||'Payment verification failed. Please contact support before retrying.');
+                  }
+                });
+              },
+              modal:{
+                ondismiss:()=>{
+                  if(!paymentCompleted) cancelDraft();
+                }
+              },
+              prefill:{
+                name:this.auth.get()?.name,
+                email:this.auth.get()?.email
+              },
+              theme:{color:'#111'}
+            };
+
+            const razorpay = new Razorpay(options);
+            razorpay.on?.('payment.failed', (response:any)=>{
+              if(paymentCompleted) return;
+              const description = response?.error?.description || 'Payment failed. Your items are still in your bag.';
+              cancelDraft(description);
+            });
+            razorpay.open();
+          },
+          error:e=>cancelDraft(e.error?.message||e.error||'Unable to start payment. Your items are still in your bag.')
+        });
+      },
+      error:e=>{
+        this.placing=false;
+        alert(e.error?.message||e.error||'Unable to create order.');
+      }
     });
   }
 }

@@ -55,3 +55,7 @@ A root `.gitignore`, GitHub Actions CI workflow and Render Docker deployment man
 The current V1 is prepared for deployment with environment-based secrets, Angular production configuration, Cloudflare Pages SPA fallback, Render Docker deployment, Brevo HTTPS email, Razorpay server-side signature verification, auth rate limiting and admin-only catalog APIs. See `docs/TESTING-CHECKLIST.md` for the remaining live-environment tests.
 
 Two deliberate V1 limitations remain documented rather than being hidden: the current database bootstrap uses `EnsureCreatedAsync()` (add controlled EF Core migrations before ongoing schema evolution), and Razorpay reconciliation currently depends on the client callback (add Razorpay webhooks before treating a high-volume store as fully payment-reconciled).
+
+
+## Payment lifecycle
+See `docs/CHANGES-PAYMENT-FLOW.md` for the server-side cart + Razorpay payment draft lifecycle and cancellation behavior.

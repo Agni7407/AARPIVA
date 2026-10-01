@@ -20,9 +20,12 @@ public record ProductResponse(int Id, int CategoryId, string CategoryName, strin
 public record AddressRequest([Required] string RecipientName, [Required] string Phone, [Required] string AddressLine1, string AddressLine2, [Required] string City, [Required] string State, [Required] string Pincode);
 public record AddressResponse(int Id, string RecipientName, string Phone, string AddressLine1, string AddressLine2, string City, string State, string Pincode);
 
-public record CreateOrderRequest([Required] int AddressId, [Required, MinLength(1)] List<CartLineRequest> Items);
+public record CreateOrderRequest([Required] int AddressId);
+public record CartItemResponse(int ProductId, int Quantity, ProductResponse Product);
+public record UpdateCartItemRequest([Range(1, 50)] int Quantity);
 public record CartLineRequest([Required] int ProductId, [Range(1, 50)] int Quantity);
 public record CreateRazorpayOrderRequest([Required] int OrderId);
+public record CancelPaymentRequest([Required] int OrderId);
 public record VerifyPaymentRequest([Required] int OrderId, [Required] string RazorpayOrderId, [Required] string RazorpayPaymentId, [Required] string RazorpaySignature);
 public record UpdateOrderStatusRequest(OrderStatus Status);
 public record CreateReturnRequest([Required] int OrderItemId, [Range(1, 50)] int Quantity, [Required, MinLength(3)] string Reason);

@@ -11,7 +11,7 @@ namespace SareeStore.Api.Controllers;
 public class AdminController(AppDbContext db, INotificationService notifications) : ControllerBase
 {
     [HttpGet("dashboard")]
-    public async Task<ActionResult> Dashboard()=>Ok(new {customers=await db.Users.CountAsync(x=>x.Role==UserRole.Customer),products=await db.Products.CountAsync(x=>x.IsActive),categories=await db.Categories.CountAsync(x=>x.IsActive),orders=await db.Orders.CountAsync(),paidRevenue=await db.Orders.Where(x=>x.PaymentStatus==PaymentStatus.Paid).SumAsync(x=>(decimal?)x.TotalAmount)??0});
+    public async Task<ActionResult> Dashboard()=>Ok(new {customers=await db.Users.CountAsync(x=>x.Role==UserRole.Customer),products=await db.Products.CountAsync(x=>x.IsActive),categories=await db.Categories.CountAsync(x=>x.IsActive),orders=await db.Orders.CountAsync(x=>x.PaymentStatus==PaymentStatus.Paid || x.PaymentStatus==PaymentStatus.Refunded),paidRevenue=await db.Orders.Where(x=>x.PaymentStatus==PaymentStatus.Paid).SumAsync(x=>(decimal?)x.TotalAmount)??0});
     [HttpGet("orders")]
     public async Task<ActionResult> Orders() => Ok(await db.Orders
         .Include(x => x.User)
@@ -57,6 +57,8 @@ public class AdminController(AppDbContext db, INotificationService notifications
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (o is null) return NotFound();
+        if (req.Status != OrderStatus.Cancelled && o.PaymentStatus != PaymentStatus.Paid && o.PaymentStatus != PaymentStatus.Refunded)
+            return BadRequest("Only paid orders can be moved to fulfilment statuses.");
         o.Status = req.Status;
         await db.SaveChangesAsync();
         await notifications.SendOrderStatusAsync(o);
