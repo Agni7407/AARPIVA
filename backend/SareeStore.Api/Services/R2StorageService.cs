@@ -158,8 +158,15 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
     }
 
     private static string BuildPublicUrl(string publicBaseUrl, string objectKey)
-        => $"{publicBaseUrl.TrimEnd('/')}/{objectKey}"
-            .Replace(" ", "%20", StringComparison.Ordinal);
+    {
+        var encodedKey = string.Join(
+            "/",
+            objectKey
+                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+
+        return $"{publicBaseUrl.TrimEnd('/')}/{encodedKey}";
+    }
 
     public void Dispose()
     {
