@@ -253,6 +253,7 @@ export class ProductsComponent {
   applySort(items:Product[]){const x=[...items];if(this.sort==='price-low')return x.sort((a,b)=>(a.discountPrice??a.price)-(b.discountPrice??b.price));if(this.sort==='price-high')return x.sort((a,b)=>(b.discountPrice??b.price)-(a.discountPrice??a.price));return x}
   image(p:Product,i:number){return this.resolveImage(p.images?.[0] || this.fallbacks[i%6]);}
   resolveImage(src:string){if(/^(https?:)?\/\//i.test(src))return src;return src.startsWith('/')?src:`/${src}`;}
+  productLink(product: Product): string[] { return ['/products', String(product.id)]; }
   addToCart(p:Product,event:Event){event.preventDefault();event.stopPropagation();this.cart.add(p,1)}
   imageError(event:Event){const img=event.target as HTMLImageElement;if(!img.src.endsWith('/assets/demo/ivory-silk.jpg'))img.src='/assets/demo/ivory-silk.jpg';}
 }

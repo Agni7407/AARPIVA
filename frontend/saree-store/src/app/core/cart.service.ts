@@ -41,12 +41,11 @@ export class CartService {
           quantity: item.quantity
         }));
 
-        const sync$ = guestLines.length
-          ? this.api.syncCart(guestLines)
-          : of(null);
+        const cart$ = guestLines.length
+          ? this.api.syncCart(guestLines).pipe(switchMap(() => this.api.cart()))
+          : this.api.cart();
 
-        return sync$.pipe(
-          switchMap(() => this.api.cart()),
+        return cart$.pipe(
           tap(() => {
             if (guestLines.length) this.clearGuestCart();
             this.readySubject.next(true);

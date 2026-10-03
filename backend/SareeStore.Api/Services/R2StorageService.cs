@@ -53,7 +53,6 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
             Expires = DateTime.UtcNow.AddMinutes(15)
         };
 
-        AWSConfigsS3.UseSignatureVersion4 = true;
         var uploadUrl = s3.GetPreSignedURL(request);
         var publicUrl = BuildPublicUrl(publicBaseUrl, objectKey);
         return new R2UploadTicket(uploadUrl, objectKey, publicUrl, 900);

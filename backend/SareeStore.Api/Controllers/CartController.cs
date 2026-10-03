@@ -73,7 +73,6 @@ public class CartController(AppDbContext db) : ControllerBase
         else
         {
             item.Product = product;
-        {
             if (item.Quantity + req.Quantity > product.Stock)
                 return BadRequest($"Only {product.Stock} item(s) are available.");
             item.Quantity += req.Quantity;
