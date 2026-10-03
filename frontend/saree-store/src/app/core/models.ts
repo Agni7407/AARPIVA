@@ -52,9 +52,9 @@ export interface ReturnRequest {
 
 export interface Order {
   id: number;
-  subtotal?: number;
-  discountAmount?: number;
-  deliveryCharge?: number;
+  subtotal: number;
+  discountAmount: number;
+  deliveryCharge: number;
   totalAmount: number;
   status: string;
   paymentStatus: string;
@@ -62,11 +62,4 @@ export interface Order {
   items: { productId: number; productName: string; unitPrice: number; quantity: number; id?: number }[];
   address: Address;
   returns: ReturnRequest[];
-}
-
-export interface CheckoutSummary {
-  subtotal: number;
-  discountAmount: number;
-  deliveryCharge: number;
-  total: number;
 }

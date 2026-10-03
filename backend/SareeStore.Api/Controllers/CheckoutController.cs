@@ -20,7 +20,7 @@ public class CheckoutController(AppDbContext db) : ControllerBase
 
         var subtotal = cartItems.Sum(x => (x.Product.DiscountPrice ?? x.Product.Price) * x.Quantity);
         var discountAmount = cartItems.Sum(x => Math.Max(0m, x.Product.Price - (x.Product.DiscountPrice ?? x.Product.Price)) * x.Quantity);
-        var deliveryCharge = await db.ApplicationSettings
+        var deliveryCharge = await db.AppSettings
             .Where(x => x.Key == "DeliveryCharge")
             .Select(x => x.Value)
             .FirstOrDefaultAsync();

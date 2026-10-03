@@ -119,13 +119,12 @@ public class Address
     public List<Order> Orders { get; set; } = [];
 }
 
-public class ApplicationSetting
+public class AppSetting
 {
     public int Id { get; set; }
     public string Key { get; set; } = "";
     public decimal Value { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
 }
 
 public class Order

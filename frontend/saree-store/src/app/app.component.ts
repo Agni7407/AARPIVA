@@ -11,7 +11,7 @@ import { Category } from './core/models';
   standalone: true,
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   template: `
-    <div class="topbar">FREE SHIPPING ON ORDERS ABOVE ₹1,499 <span>•</span> EASY RETURNS <span>•</span> SECURE UPI CHECKOUT</div>
+    <div class="topbar">FREE SHIPPING ON ELIGIBLE ORDERS <span>•</span> EASY RETURNS <span>•</span> SECURE UPI CHECKOUT</div>
     <header class="site-header">
       <button class="menu-toggle" type="button" (click)="mobileOpen=!mobileOpen" aria-label="Open menu">☰</button>
       <a routerLink="/" class="logo">AARPIVA<span>®</span></a>

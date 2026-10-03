@@ -18,14 +18,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
     public DbSet<CartItem> CartItems => Set<CartItem>();
-    public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
         b.Entity<Category>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<Product>().HasIndex(x => x.Slug).IsUnique();
-        b.Entity<ApplicationSetting>().HasIndex(x => x.Key).IsUnique();
         b.Entity<EmailVerificationToken>().HasIndex(x => x.TokenHash).IsUnique();
         b.Entity<EmailVerificationOtp>().HasIndex(x => new { x.UserId, x.Used, x.ExpiresAt });
         b.Entity<CartItem>().HasIndex(x => new { x.UserId, x.ProductId }).IsUnique();
@@ -34,7 +33,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<EmailVerificationOtp>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Product>().Property(x => x.Price).HasPrecision(12, 2);
         b.Entity<Product>().Property(x => x.DiscountPrice).HasPrecision(12, 2);
-        b.Entity<ApplicationSetting>().Property(x => x.Value).HasPrecision(12, 2);
+        b.Entity<AppSetting>().HasIndex(x => x.Key).IsUnique();
+        b.Entity<AppSetting>().Property(x => x.Value).HasPrecision(12, 2);
         b.Entity<Order>().Property(x => x.Subtotal).HasPrecision(12, 2);
         b.Entity<Order>().Property(x => x.DiscountAmount).HasPrecision(12, 2);
         b.Entity<Order>().Property(x => x.DeliveryCharge).HasPrecision(12, 2);

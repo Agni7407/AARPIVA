@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { CartService } from '../../core/cart.service';
+import { ApiService } from '../../core/api.service';
 
 
 @Component({
@@ -58,10 +59,15 @@ import { CartService } from '../../core/cart.service';
 })
 export class CartComponent {
   cart=inject(CartService);
-
+  api=inject(ApiService);
   router=inject(Router);
+  deliveryCharge=99;
+  freeDeliveryThreshold=1499;
+  constructor(){
+    this.api.deliverySettings().subscribe({next:s=>{this.deliveryCharge=s.deliveryCharge;this.freeDeliveryThreshold=s.freeDeliveryThreshold;}});
+  }
   get shipping() {
-    return this.cart.subtotal >= 1499 || this.cart.subtotal === 0 ? 0 : 99;
+    return this.cart.subtotal === 0 || this.cart.subtotal >= this.freeDeliveryThreshold ? 0 : this.deliveryCharge;
   }
   get total() {
     return this.cart.subtotal + this.shipping;

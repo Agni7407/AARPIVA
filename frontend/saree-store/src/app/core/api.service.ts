@@ -104,20 +104,20 @@ export class ApiService {
     return this.http.delete(`${this.base}/account/addresses/${id}`);
   }
 
+  deliverySettings() {
+    return this.http.get<{deliveryCharge:number;freeDeliveryThreshold:number}>(`${this.base}/settings/delivery`);
+  }
+
+  adminDeliverySettings() {
+    return this.http.get<{deliveryCharge:number;freeDeliveryThreshold:number}>(`${this.base}/admin/delivery-settings`);
+  }
+
+  updateAdminDeliverySettings(body: {deliveryCharge:number;freeDeliveryThreshold:number}) {
+    return this.http.put<{deliveryCharge:number;freeDeliveryThreshold:number}>(`${this.base}/admin/delivery-settings`, body);
+  }
+
   createOrder(body: unknown) {
     return this.http.post<Order>(`${this.base}/orders`, body);
-  }
-
-  checkoutSummary() {
-    return this.http.get<{ subtotal: number; discountAmount: number; deliveryCharge: number; total: number }>(`${this.base}/checkout/summary`);
-  }
-
-  adminDeliveryCharge() {
-    return this.http.get<{ deliveryCharge: number }>(`${this.base}/admin/settings/delivery-charge`);
-  }
-
-  updateAdminDeliveryCharge(deliveryCharge: number) {
-    return this.http.put<{ deliveryCharge: number; message: string }>(`${this.base}/admin/settings/delivery-charge`, { deliveryCharge });
   }
 
   myOrders() {

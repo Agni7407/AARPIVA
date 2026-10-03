@@ -115,11 +115,6 @@ import { Order } from '../../core/models';
                 <span>{{o.address.city}}, {{o.address.state}} - {{o.address.pincode}}</span>
               </div>
 
-              <div class="order-breakdown">
-                <div><span>Subtotal</span><strong>{{(o.subtotal ?? o.totalAmount) | currency:'INR':'symbol':'1.0-0'}}</strong></div>
-                <div><span>Discount</span><strong>-{{(o.discountAmount ?? 0) | currency:'INR':'symbol':'1.0-0'}}</strong></div>
-                <div><span>Delivery</span><strong>{{(o.deliveryCharge ?? 0) === 0 ? 'FREE' : ((o.deliveryCharge ?? 0) | currency:'INR':'symbol':'1.0-0')}}</strong></div>
-              </div>
               <div class="order-total">
                 <span>Total paid</span>
                 <strong>{{o.totalAmount | currency:'INR':'symbol':'1.0-0'}}</strong>

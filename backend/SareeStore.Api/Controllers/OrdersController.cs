@@ -26,37 +26,31 @@ public class OrdersController(AppDbContext db, INotificationService notification
         if (cartItems.Count == 0) return BadRequest("Your bag is empty.");
 
         var order = new Order { UserId = userId, AddressId = address.Id };
-        var subtotal = 0m;
-        var discountAmount = 0m;
         foreach (var line in cartItems)
         {
             var p = line.Product;
             if (!p.IsActive) return BadRequest($"{p.Name} is no longer available.");
             if (p.Stock < line.Quantity) return BadRequest($"Insufficient stock for {p.Name}.");
 
-            var unitPrice = p.DiscountPrice ?? p.Price;
-            var discount = Math.Max(0m, p.Price - unitPrice) * line.Quantity;
-            subtotal += unitPrice * line.Quantity;
-            discountAmount += discount;
-
+            var price = p.DiscountPrice ?? p.Price;
             order.Items.Add(new OrderItem
             {
                 ProductId = p.Id,
                 ProductName = p.Name,
-                UnitPrice = unitPrice,
+                UnitPrice = price,
                 Quantity = line.Quantity
             });
+            order.Subtotal += price * line.Quantity;
         }
 
-        var deliveryCharge = await db.ApplicationSettings
-            .Where(x => x.Key == "DeliveryCharge")
-            .Select(x => x.Value)
-            .FirstOrDefaultAsync();
-
-        order.Subtotal = subtotal;
-        order.DiscountAmount = discountAmount;
-        order.DeliveryCharge = deliveryCharge;
-        order.TotalAmount = subtotal - discountAmount + deliveryCharge;
+        var settings = await db.AppSettings
+            .Where(x => x.Key == "DeliveryCharge" || x.Key == "FreeDeliveryThreshold")
+            .ToListAsync();
+        var deliveryCharge = settings.FirstOrDefault(x => x.Key == "DeliveryCharge")?.Value ?? 99m;
+        var freeThreshold = settings.FirstOrDefault(x => x.Key == "FreeDeliveryThreshold")?.Value ?? 1499m;
+        order.DiscountAmount = 0m;
+        order.DeliveryCharge = order.Subtotal >= freeThreshold || order.Subtotal == 0m ? 0m : deliveryCharge;
+        order.TotalAmount = order.Subtotal - order.DiscountAmount + order.DeliveryCharge;
 
         db.Orders.Add(order);
         await db.SaveChangesAsync();

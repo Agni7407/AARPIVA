@@ -52,9 +52,8 @@ declare const Razorpay:any;
         </div>
         <aside>
           <h2>Order total</h2>
-          <p class="sum"><span>Subtotal</span><b>{{summary?.subtotal ?? cart.subtotal | currency:'INR':'symbol':'1.0-0'}}</b></p>
-          <p class="sum"><span>Discount</span><b>{{discountDisplay}}</b></p>
-          <p class="sum"><span>Delivery</span><b>{{shippingDisplay}}</b></p>
+          <p class="sum"><span>Items</span><b>{{cart.subtotal|currency:'INR':'symbol':'1.0-0'}}</b></p>
+          <p class="sum"><span>Shipping</span><b>{{shipping===0?'Free':(shipping|currency:'INR':'symbol':'1.0-0')}}</b></p>
           <hr><p class="sum total"><span>Pay</span><b>{{payTotal|currency:'INR':'symbol':'1.0-0'}}</b></p>
           <button class="btn dark full payment-button" type="button" [disabled]="!selectedAddress || placing" (click)="pay()">{{placing?'Opening payment…':'Pay securely with Razorpay'}}</button>
           <p class="tiny">V1 uses Razorpay Test Mode until you add live credentials.</p>
@@ -70,33 +69,17 @@ declare const Razorpay:any;
 })
 export class CheckoutComponent{
   api=inject(ApiService);auth=inject(AuthService);router=inject(Router);cart=inject(CartService);
-  addresses:Address[]=[];selectedAddress=0;showForm=false;placing=false;addressSaving=false;addressDeletingId:number|null=null;editingAddressId:number|null=null;addressError='';newAddress:any={recipientName:'',phone:'',addressLine1:'',addressLine2:'',city:'',state:'',pincode:''};summary:any=null;
+  addresses:Address[]=[];selectedAddress=0;deliveryCharge=99;freeDeliveryThreshold=1499;showForm=false;placing=false;addressSaving=false;addressDeletingId:number|null=null;editingAddressId:number|null=null;addressError='';newAddress:any={recipientName:'',phone:'',addressLine1:'',addressLine2:'',city:'',state:'',pincode:''};
   constructor(){
     if (!this.auth.isLogged()) {
       this.router.navigate(['/login'], { queryParams: { returnUrl: '/checkout' } });
       return;
     }
+    this.api.deliverySettings().subscribe({next:s=>{this.deliveryCharge=s.deliveryCharge;this.freeDeliveryThreshold=s.freeDeliveryThreshold;},error:()=>{}});
     this.loadAddresses();
-    this.loadCheckoutSummary();
   }
-  get shipping(){return this.summary?.deliveryCharge ?? 0;}
-  get payTotal(){return this.summary?.total ?? this.cart.subtotal;}
-  get discountDisplay(){
-    const amount = this.summary?.discountAmount ?? 0;
-    return `-${this.currency(amount)}`;
-  }
-  get shippingDisplay(){
-    return this.shipping === 0 ? 'FREE' : this.currency(this.shipping);
-  }
-  private currency(amount:number){
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
-  }
-  loadCheckoutSummary(){
-    this.api.checkoutSummary().subscribe({
-      next: summary => this.summary = summary,
-      error: () => this.summary = { subtotal: this.cart.subtotal, discountAmount: 0, deliveryCharge: 0, total: this.cart.subtotal }
-    });
-  }
+  get shipping(){return this.cart.subtotal===0 || this.cart.subtotal>=this.freeDeliveryThreshold ? 0 : this.deliveryCharge;}
+  get payTotal(){return this.cart.subtotal+this.shipping}
   loadAddresses(){
     this.addressError='';
     this.api.addresses().subscribe({

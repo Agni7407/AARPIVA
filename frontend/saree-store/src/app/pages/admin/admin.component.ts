@@ -23,8 +23,8 @@ import { Router } from '@angular/router';
         <button [class.sel]="tab==='products'" (click)="selectTab('products')">Products</button>
         <button [class.sel]="tab==='categories'" (click)="selectTab('categories')">Categories</button>
         <button [class.sel]="tab==='orders'" (click)="selectTab('orders')">Orders</button>
-        <button [class.sel]="tab==='delivery'" (click)="selectTab('delivery')">Delivery</button>
         <button [class.sel]="tab==='customers'" (click)="selectTab('customers')">Customers</button>
+        <button [class.sel]="tab==='delivery'" (click)="selectTab('delivery')">Delivery</button>
         <button [class.sel]="tab==='returns'" (click)="selectTab('returns')">Returns <span *ngIf="returns.length" class="tab-count">{{returns.length}}</span></button>
       </div>
 
@@ -44,6 +44,31 @@ import { Router } from '@angular/router';
         </div>
       </div>
       <div *ngIf="adminLoadError" class="alert error">{{adminLoadError}} <button type="button" class="retry" (click)="load()">Retry</button></div>
+
+      <div *ngIf="tab==='delivery'" class="panel">
+        <div class="panel-head">
+          <div><h2>Shipping & delivery</h2><p class="panel-subtitle">Control the delivery charge and the order value at which delivery becomes free.</p></div>
+        </div>
+        <form class="inline-form delivery-settings-form" (ngSubmit)="saveDeliverySettings()">
+          <div class="field compact">
+            <label for="deliveryCharge">Delivery charge (₹)</label>
+            <input id="deliveryCharge" [(ngModel)]="deliverySettings.deliveryCharge" name="deliveryCharge" type="number" min="0" step="0.01" required>
+            <small>Use 0 for free delivery on every order.</small>
+          </div>
+          <div class="field compact">
+            <label for="freeDeliveryThreshold">Free delivery threshold (₹)</label>
+            <input id="freeDeliveryThreshold" [(ngModel)]="deliverySettings.freeDeliveryThreshold" name="freeDeliveryThreshold" type="number" min="0" step="0.01" required>
+            <small>Orders at or above this subtotal get free delivery.</small>
+          </div>
+          <div class="delivery-preview">
+            <strong>Current rule</strong>
+            <span *ngIf="deliverySettings.deliveryCharge === 0">FREE delivery on every order.</span>
+            <span *ngIf="deliverySettings.deliveryCharge !== 0">₹{{deliverySettings.deliveryCharge | number:'1.0-2'}} delivery below ₹{{deliverySettings.freeDeliveryThreshold | number:'1.0-2'}}; FREE at or above the threshold.</span>
+          </div>
+          <div class="form-actions"><button class="btn dark" type="submit" [disabled]="deliverySaving">{{deliverySaving?'Saving…':'Save delivery settings'}}</button></div>
+          <div *ngIf="deliveryError" class="alert error">{{deliveryError}}</div>
+        </form>
+      </div>
 
       <div *ngIf="tab==='categories'" class="panel">
         <div class="panel-head">
@@ -347,14 +372,6 @@ import { Router } from '@angular/router';
                 </div>
 
                 <div>
-                  <h3>Order summary</h3>
-                  <div class="shipping-card">
-                    <span><strong>Subtotal:</strong> {{(o.subtotal ?? o.totalAmount) | currency:'INR':'symbol':'1.0-0'}}</span>
-                    <span><strong>Discount:</strong> -{{(o.discountAmount ?? 0) | currency:'INR':'symbol':'1.0-0'}}</span>
-                    <span><strong>Delivery:</strong> {{(o.deliveryCharge ?? 0) === 0 ? 'FREE' : ((o.deliveryCharge ?? 0) | currency:'INR':'symbol':'1.0-0')}}</span>
-                    <span><strong>Total:</strong> {{o.totalAmount | currency:'INR':'symbol':'1.0-0'}}</span>
-                  </div>
-
                   <h3>Shipping address</h3>
                   <div class="shipping-card" *ngIf="o.address">
                     <strong>{{o.address.recipientName}}</strong>
@@ -366,42 +383,12 @@ import { Router } from '@angular/router';
                   <div *ngIf="!o.address" class="detail-empty">No shipping address available.</div>
                 </div>
               </div>
+
             </div>
           </ng-container>
 
           <div *ngIf="!orders.length && !ordersLoadError" class="empty">No customer orders found.</div>
         </div>
-      </div>
-
-      <div *ngIf="tab==='delivery'" class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Shipping & Delivery</h2>
-            <p class="panel-subtitle">Control the delivery fee used for new checkouts and preserve historical order totals.</p>
-          </div>
-        </div>
-
-        <form class="inline-form" (ngSubmit)="saveDeliveryCharge()">
-          <div class="field compact">
-            <label for="deliveryCharge">Delivery charge</label>
-            <div class="currency-input">
-              <span>₹</span>
-              <input id="deliveryCharge" [(ngModel)]="deliveryChargeInput" name="deliveryCharge" type="number" min="0" max="9999.99" step="0.01" placeholder="99.00" required>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn dark" type="submit" [disabled]="savingDeliveryCharge">{{savingDeliveryCharge ? 'Saving…' : 'Save Changes'}}</button>
-          </div>
-        </form>
-
-        <div class="delivery-status" *ngIf="deliveryCharge !== null">
-          <strong>Current Delivery Charge</strong>
-          <p *ngIf="deliveryCharge === 0">✓ Free delivery is currently enabled.</p>
-          <p *ngIf="deliveryCharge > 0">Delivery charge: {{deliveryCharge|currency:'INR':'symbol':'1.0-2'}}</p>
-        </div>
-
-        <div *ngIf="deliveryChargeError" class="alert error">{{deliveryChargeError}}</div>
       </div>
 
       <div *ngIf="tab==='returns'" class="panel">
@@ -568,7 +555,7 @@ import { Router } from '@angular/router';
 
     .dashboard-grid{display:grid;gap:18px}.stat-link{border:0;background:none;padding:0;text-align:left;text-decoration:underline;font-size:11px;color:#555;cursor:pointer}.dashboard-panel{background:#fff;padding:25px;border:1px solid var(--line)}.dashboard-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.recent-orders{margin-top:16px;border-top:1px solid var(--line)}.recent-order{display:flex;justify-content:space-between;gap:15px;padding:14px 0;border-bottom:1px solid var(--line)}.recent-order span{display:grid;gap:4px}.recent-order small{color:var(--muted);font-size:11px}.dashboard-empty{padding:22px 0;color:var(--muted);font-size:13px}.admin{padding:45px 6vw;background:#f7f4ef;min-height:750px}.admin-top{display:flex;justify-content:space-between;align-items:end}.admin h1{font:600 45px 'Playfair Display';margin:5px 0 25px}.tabs{display:flex;gap:5px;border-bottom:1px solid #ddd;margin-bottom:28px;overflow:auto}.tabs button{border:0;background:none;padding:13px 16px;cursor:pointer;white-space:nowrap}.tabs .sel{border-bottom:2px solid #111;font-weight:700}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px}.stats div{background:#fff;padding:25px;border:1px solid var(--line);display:grid;gap:8px}.stats small{color:var(--muted)}.stats b{font-size:27px}.panel{background:#fff;padding:28px;border:1px solid var(--line);margin-bottom:20px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.panel-head h2{margin:0}.panel-subtitle{margin:6px 0 0;color:var(--muted);font-size:14px}.inline-form,.product-form{margin:22px 0 10px;padding:22px;background:#faf7f2;border:1px solid #eee6dc}.inline-form{display:flex;gap:18px;align-items:end;flex-wrap:wrap}.field{display:grid;gap:7px}.field.compact{min-width:280px}.field label,.product-form>label,.product-form .field>label{font-weight:700;font-size:14px}.field label span{color:#9b2c2c}.field input,.field select,.field textarea,.product-form input,.product-form select,.product-form textarea,.order-row select{width:100%;box-sizing:border-box;padding:12px 13px;border:1px solid #d9d1c6;background:#fff;border-radius:3px;font:inherit}.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid #111;outline-offset:-1px}.field small,.active-check small{color:var(--muted);font-size:12px;line-height:1.4}.image-source-tabs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.source-option{display:flex;gap:10px;align-items:flex-start;padding:14px;border:1px solid #ddd7cf;background:#fff;cursor:pointer}.source-option.selected{border-color:#111;background:#faf7f2}.source-option input{margin-top:3px}.source-option span{display:grid;gap:4px}.source-option small{color:var(--muted);font-size:11px;line-height:1.4}.image-preview{margin-top:4px;position:relative;width:140px;aspect-ratio:3/4;background:#eee;overflow:hidden}.image-preview img{width:100%;height:100%;object-fit:cover}.image-preview span{position:absolute;left:7px;bottom:7px;background:#fff;padding:5px 7px;font-size:9px;letter-spacing:.1em;text-transform:uppercase}.form-grid{display:grid;gap:18px;margin-bottom:24px}.form-grid.two{grid-template-columns:1fr 1fr}.form-grid.three{grid-template-columns:repeat(3,1fr)}.field.full{margin-bottom:22px}.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;color:#6f665b;margin:5px 0 14px;padding-bottom:8px;border-bottom:1px solid #eee6dc}.check-line{display:flex;align-items:center;gap:8px;font-size:14px}.check-line input{width:auto}.active-check{align-items:flex-start;margin-top:2px}.active-check span{display:grid;gap:3px}.form-actions{display:flex;gap:10px;align-items:center}.bottom-actions{margin-top:10px}.btn{border:0;padding:13px 18px;cursor:pointer;font-weight:700;border-radius:2px}.btn:disabled{opacity:.45;cursor:not-allowed}.dark{background:#161515;color:#fff}.light{background:#f0ece5;color:#171515}.alert{padding:13px 15px;margin:16px 0;border:1px solid #e5c6c6;background:#fff5f5;font-size:14px}.retry{border:0;background:none;text-decoration:underline;font-weight:700;cursor:pointer;margin-left:8px}.table{margin-top:20px}.tr{display:grid;gap:12px;align-items:center;border-top:1px solid var(--line);padding:13px 0}.cat-row{grid-template-columns:2fr 1fr 1fr}.product-row{grid-template-columns:2.2fr 1.2fr 1fr .7fr 1.2fr}.order-row{grid-template-columns:1fr 2fr 1fr 1.2fr}.customer-row{grid-template-columns:1.4fr 2fr 1fr 1fr}.tr.head{font-weight:700;border-top:0;padding-top:5px}.tr button{border:0;background:none;text-decoration:underline;cursor:pointer;margin-right:12px;padding:0}.tr small{display:block;color:var(--muted)}.strong,.tr strong{font-weight:700}.status{display:inline-block;padding:5px 9px;background:#e8f3e8;font-size:12px}.hidden-status{background:#eee;color:#777}.empty{padding:32px 10px;text-align:center;color:var(--muted);border-top:1px solid var(--line)}.product-cell{display:flex;gap:10px;align-items:center}.thumb{width:48px;height:58px;background:#eee;overflow:hidden;display:inline-flex;flex:0 0 auto}.thumb img{width:100%;height:100%;object-fit:cover}.denied{display:grid;place-items:center;min-height:650px}@media(max-width:980px){.form-grid.three{grid-template-columns:1fr}.product-row{grid-template-columns:2fr 1fr 1fr 1fr}.product-row span:nth-child(2),.product-row span:nth-child(4){display:none}}@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.dashboard-panel{padding:18px}.dashboard-panel-head{flex-direction:column}.recent-order{align-items:flex-start}.form-grid.two{grid-template-columns:1fr}.tr{grid-template-columns:1fr 1fr}.tr.head{display:none}.panel{padding:18px}.admin{padding:28px 4vw}.product-row,.order-row,.customer-row,.cat-row{grid-template-columns:1fr 1fr}.product-row span:nth-child(2),.product-row span:nth-child(4){display:block}.panel-head{align-items:stretch;flex-direction:column}.panel-head .btn{align-self:flex-start}}
   @media(max-width:1100px){.admin{padding:35px 4vw}.product-row{grid-template-columns:2fr 1fr 1fr 1fr}.product-row span:nth-child(2){display:none}}@media(max-width:980px){.form-grid.three{grid-template-columns:1fr}.image-source-tabs{grid-template-columns:1fr}.product-row{grid-template-columns:2fr 1fr 1fr}.product-row span:nth-child(4){display:none}.panel-head{flex-direction:column}.panel-head .btn{align-self:flex-start}}@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.dashboard-panel{padding:18px}.dashboard-panel-head{flex-direction:column}.recent-order{align-items:flex-start}.form-grid.two{grid-template-columns:1fr}.tr{grid-template-columns:1fr 1fr}.tr.head{display:none}.panel{padding:18px}.admin{padding:28px 4vw}.product-row,.order-row,.customer-row,.cat-row{grid-template-columns:1fr 1fr}.product-row span:nth-child(2),.product-row span:nth-child(4){display:block}.panel-head{align-items:stretch;flex-direction:column}.panel-head .btn{align-self:flex-start}.table{overflow-x:auto}.tr{min-width:620px}.product-form{padding:16px}.form-actions{flex-wrap:wrap}}@media(max-width:520px){.stats{grid-template-columns:1fr}.recent-order{flex-direction:column}.admin-top{align-items:flex-start;gap:12px;flex-direction:column}.admin h1{font-size:34px}.tabs{margin-bottom:20px}.panel{padding:14px}.tr{min-width:560px}.panel-head h2{font-size:24px}.source-option{padding:12px}}
-    .tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 4px;border-radius:99px;background:#111;color:#fff;font-size:9px}
+    .delivery-settings-form{align-items:flex-start}.delivery-preview{display:grid;gap:5px;min-width:300px;max-width:520px;padding:13px 15px;background:#fff;border:1px solid #e5ded4;line-height:1.5}.delivery-preview strong{font-size:12px;text-transform:uppercase;letter-spacing:.08em}.delivery-preview span{font-size:13px;color:var(--muted)}.tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 4px;border-radius:99px;background:#111;color:#fff;font-size:9px}
     .return-admin-list{display:grid;gap:14px}.return-admin-card{border:1px solid var(--line);padding:18px;background:#fff}.return-admin-head{display:flex;justify-content:space-between;gap:15px;align-items:start;border-bottom:1px solid #eee;padding-bottom:14px;margin-bottom:14px}.return-admin-head small{display:block;color:var(--muted);margin-top:4px}.return-admin-head select{min-width:155px;padding:9px;border:1px solid var(--line);background:#fff}.return-admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.return-admin-grid>div{display:grid;gap:5px}.return-admin-grid .label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;color:#777}.return-admin-grid small{color:#777}.return-admin-grid p{margin:0;line-height:1.5;color:#555}.return-admin-grid textarea{width:100%;border:1px solid var(--line);padding:10px;resize:vertical;font:inherit;box-sizing:border-box}.note-save{justify-self:start;min-height:38px;padding:0 12px;font-size:11px}
     @media(max-width:700px){.return-admin-head{flex-direction:column}.return-admin-head select{width:100%}.return-admin-grid{grid-template-columns:1fr}}
 `]
@@ -599,10 +586,9 @@ export class AdminComponent {
   returnStatuses = ['Requested','Approved','Rejected','Received','Refunded','Cancelled'];
   returnStatusSaving: Record<number, boolean> = {};
   productImageUploadInFlight = 0;
-  deliveryCharge: number | null = null;
-  deliveryChargeInput = '99';
-  savingDeliveryCharge = false;
-  deliveryChargeError = '';
+  deliverySettings = { deliveryCharge: 99, freeDeliveryThreshold: 1499 };
+  deliverySaving = false;
+  deliveryError = '';
 
   constructor() {
     if (!this.auth.isAdmin()) {
@@ -658,44 +644,30 @@ export class AdminComponent {
     if(tab==='products') this.loadProducts();
     if(tab==='categories') this.loadCategories();
     if(tab==='orders') this.loadOrders();
-    if(tab==='delivery') this.loadDeliveryCharge();
     if(tab==='customers') this.loadCustomers();
     if(tab==='returns') this.loadReturns();
+    if(tab==='delivery') this.loadDeliverySettings();
   }
 
-  loadDeliveryCharge(){
-    this.deliveryChargeError = '';
-    this.api.adminDeliveryCharge().subscribe({
-      next: x => {
-        this.deliveryCharge = Number(x?.deliveryCharge ?? 0);
-        this.deliveryChargeInput = String(this.deliveryCharge);
-      },
-      error: e => {
-        this.deliveryCharge = null;
-        this.deliveryChargeError = this.errorMessage(e, 'Unable to load the delivery charge.');
-      }
+  loadDeliverySettings(){
+    this.deliveryError='';
+    this.api.adminDeliverySettings().subscribe({
+      next:x=>this.deliverySettings={deliveryCharge:Number(x.deliveryCharge),freeDeliveryThreshold:Number(x.freeDeliveryThreshold)},
+      error:e=>this.deliveryError=this.errorMessage(e,'Unable to load delivery settings.')
     });
   }
 
-  saveDeliveryCharge(){
-    this.deliveryChargeError = '';
-    const parsed = Number(this.deliveryChargeInput);
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 9999.99 || !Number.isFinite(Number(parsed.toFixed(2)))) {
-      this.deliveryChargeError = 'Delivery charge must be a valid amount between ₹0 and ₹9,999.99.';
+  saveDeliverySettings(){
+    const deliveryCharge=Number(this.deliverySettings.deliveryCharge);
+    const freeDeliveryThreshold=Number(this.deliverySettings.freeDeliveryThreshold);
+    if(!Number.isFinite(deliveryCharge)||deliveryCharge<0||!Number.isFinite(freeDeliveryThreshold)||freeDeliveryThreshold<0){
+      this.deliveryError='Enter valid non-negative delivery values.';
       return;
     }
-
-    this.savingDeliveryCharge = true;
-    this.api.updateAdminDeliveryCharge(parsed).subscribe({
-      next: response => {
-        this.deliveryCharge = Number(response?.deliveryCharge ?? parsed);
-        this.deliveryChargeInput = String(this.deliveryCharge);
-        this.savingDeliveryCharge = false;
-      },
-      error: e => {
-        this.savingDeliveryCharge = false;
-        this.deliveryChargeError = this.errorMessage(e, 'Unable to update the delivery settings.');
-      }
+    this.deliverySaving=true; this.deliveryError='';
+    this.api.updateAdminDeliverySettings({deliveryCharge,freeDeliveryThreshold}).subscribe({
+      next:x=>{this.deliverySettings={deliveryCharge:Number(x.deliveryCharge),freeDeliveryThreshold:Number(x.freeDeliveryThreshold)};this.deliverySaving=false;alert('Delivery settings updated successfully.');},
+      error:e=>{this.deliverySaving=false;this.deliveryError=this.errorMessage(e,'Unable to update delivery settings.');}
     });
   }
 

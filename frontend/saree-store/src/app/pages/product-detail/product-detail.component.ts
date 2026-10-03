@@ -60,7 +60,7 @@ import { Product } from '../../core/models';
 
           <div class="accordions">
             <details open><summary>Product details</summary><p>Designed for easy elegance. Product care and fabric details can be maintained from the admin panel.</p></details>
-            <details><summary>Shipping & returns</summary><p>Free shipping is currently available on orders above ₹1,499. Orders below that value have a ₹99 shipping charge.</p></details>
+            <details><summary>Shipping & returns</summary><p>Delivery charges and any free-delivery threshold are calculated from the current store settings and shown at checkout.</p></details>
             <details><summary>Secure payments</summary><p>Razorpay supports UPI, cards and other available checkout methods.</p></details>
           </div>
         </div>
