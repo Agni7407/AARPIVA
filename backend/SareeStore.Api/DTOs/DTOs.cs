@@ -32,9 +32,13 @@ public record CreateRazorpayOrderRequest([Required] int OrderId);
 public record CancelPaymentRequest([Required] int OrderId);
 public record VerifyPaymentRequest([Required] int OrderId, [Required] string RazorpayOrderId, [Required] string RazorpayPaymentId, [Required] string RazorpaySignature);
 public record UpdateOrderStatusRequest(OrderStatus Status);
+public record DeliveryChargeRequest([Range(0, 9999.99)] decimal DeliveryCharge);
+public record DeliveryChargeResponse(decimal DeliveryCharge);
+public record UpdateDeliveryChargeResponse(decimal DeliveryCharge, string Message);
+public record CheckoutSummaryResponse(decimal Subtotal, decimal DiscountAmount, decimal DeliveryCharge, decimal Total);
 public record CreateReturnRequest([Required] int OrderItemId, [Range(1, 50)] int Quantity, [Required, MinLength(3)] string Reason);
 public record UpdateReturnStatusRequest(ReturnStatus Status, string? AdminNote);
 public record ReturnRequestResponse(int Id, int OrderId, int OrderItemId, int ProductId, string ProductName, int Quantity, string Reason, ReturnStatus Status, string AdminNote, DateTime CreatedAt, DateTime UpdatedAt);
 
-public record OrderListResponse(int Id, decimal TotalAmount, OrderStatus Status, PaymentStatus PaymentStatus, DateTime CreatedAt, List<OrderItemResponse> Items, AddressResponse Address, List<ReturnRequestResponse> Returns);
+public record OrderListResponse(int Id, decimal Subtotal, decimal DiscountAmount, decimal DeliveryCharge, decimal TotalAmount, OrderStatus Status, PaymentStatus PaymentStatus, DateTime CreatedAt, List<OrderItemResponse> Items, AddressResponse Address, List<ReturnRequestResponse> Returns);
 public record OrderItemResponse(int Id, int ProductId, string ProductName, decimal UnitPrice, int Quantity);

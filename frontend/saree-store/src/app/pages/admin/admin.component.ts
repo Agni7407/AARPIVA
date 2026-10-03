@@ -23,6 +23,7 @@ import { Router } from '@angular/router';
         <button [class.sel]="tab==='products'" (click)="selectTab('products')">Products</button>
         <button [class.sel]="tab==='categories'" (click)="selectTab('categories')">Categories</button>
         <button [class.sel]="tab==='orders'" (click)="selectTab('orders')">Orders</button>
+        <button [class.sel]="tab==='delivery'" (click)="selectTab('delivery')">Delivery</button>
         <button [class.sel]="tab==='customers'" (click)="selectTab('customers')">Customers</button>
         <button [class.sel]="tab==='returns'" (click)="selectTab('returns')">Returns <span *ngIf="returns.length" class="tab-count">{{returns.length}}</span></button>
       </div>
@@ -346,6 +347,14 @@ import { Router } from '@angular/router';
                 </div>
 
                 <div>
+                  <h3>Order summary</h3>
+                  <div class="shipping-card">
+                    <span><strong>Subtotal:</strong> {{(o.subtotal ?? o.totalAmount) | currency:'INR':'symbol':'1.0-0'}}</span>
+                    <span><strong>Discount:</strong> -{{(o.discountAmount ?? 0) | currency:'INR':'symbol':'1.0-0'}}</span>
+                    <span><strong>Delivery:</strong> {{(o.deliveryCharge ?? 0) === 0 ? 'FREE' : ((o.deliveryCharge ?? 0) | currency:'INR':'symbol':'1.0-0')}}</span>
+                    <span><strong>Total:</strong> {{o.totalAmount | currency:'INR':'symbol':'1.0-0'}}</span>
+                  </div>
+
                   <h3>Shipping address</h3>
                   <div class="shipping-card" *ngIf="o.address">
                     <strong>{{o.address.recipientName}}</strong>
@@ -357,12 +366,42 @@ import { Router } from '@angular/router';
                   <div *ngIf="!o.address" class="detail-empty">No shipping address available.</div>
                 </div>
               </div>
-
             </div>
           </ng-container>
 
           <div *ngIf="!orders.length && !ordersLoadError" class="empty">No customer orders found.</div>
         </div>
+      </div>
+
+      <div *ngIf="tab==='delivery'" class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Shipping & Delivery</h2>
+            <p class="panel-subtitle">Control the delivery fee used for new checkouts and preserve historical order totals.</p>
+          </div>
+        </div>
+
+        <form class="inline-form" (ngSubmit)="saveDeliveryCharge()">
+          <div class="field compact">
+            <label for="deliveryCharge">Delivery charge</label>
+            <div class="currency-input">
+              <span>₹</span>
+              <input id="deliveryCharge" [(ngModel)]="deliveryChargeInput" name="deliveryCharge" type="number" min="0" max="9999.99" step="0.01" placeholder="99.00" required>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn dark" type="submit" [disabled]="savingDeliveryCharge">{{savingDeliveryCharge ? 'Saving…' : 'Save Changes'}}</button>
+          </div>
+        </form>
+
+        <div class="delivery-status" *ngIf="deliveryCharge !== null">
+          <strong>Current Delivery Charge</strong>
+          <p *ngIf="deliveryCharge === 0">✓ Free delivery is currently enabled.</p>
+          <p *ngIf="deliveryCharge > 0">Delivery charge: {{deliveryCharge|currency:'INR':'symbol':'1.0-2'}}</p>
+        </div>
+
+        <div *ngIf="deliveryChargeError" class="alert error">{{deliveryChargeError}}</div>
       </div>
 
       <div *ngIf="tab==='returns'" class="panel">
@@ -560,6 +599,10 @@ export class AdminComponent {
   returnStatuses = ['Requested','Approved','Rejected','Received','Refunded','Cancelled'];
   returnStatusSaving: Record<number, boolean> = {};
   productImageUploadInFlight = 0;
+  deliveryCharge: number | null = null;
+  deliveryChargeInput = '99';
+  savingDeliveryCharge = false;
+  deliveryChargeError = '';
 
   constructor() {
     if (!this.auth.isAdmin()) {
@@ -615,8 +658,45 @@ export class AdminComponent {
     if(tab==='products') this.loadProducts();
     if(tab==='categories') this.loadCategories();
     if(tab==='orders') this.loadOrders();
+    if(tab==='delivery') this.loadDeliveryCharge();
     if(tab==='customers') this.loadCustomers();
     if(tab==='returns') this.loadReturns();
+  }
+
+  loadDeliveryCharge(){
+    this.deliveryChargeError = '';
+    this.api.adminDeliveryCharge().subscribe({
+      next: x => {
+        this.deliveryCharge = Number(x?.deliveryCharge ?? 0);
+        this.deliveryChargeInput = String(this.deliveryCharge);
+      },
+      error: e => {
+        this.deliveryCharge = null;
+        this.deliveryChargeError = this.errorMessage(e, 'Unable to load the delivery charge.');
+      }
+    });
+  }
+
+  saveDeliveryCharge(){
+    this.deliveryChargeError = '';
+    const parsed = Number(this.deliveryChargeInput);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 9999.99 || !Number.isFinite(Number(parsed.toFixed(2)))) {
+      this.deliveryChargeError = 'Delivery charge must be a valid amount between ₹0 and ₹9,999.99.';
+      return;
+    }
+
+    this.savingDeliveryCharge = true;
+    this.api.updateAdminDeliveryCharge(parsed).subscribe({
+      next: response => {
+        this.deliveryCharge = Number(response?.deliveryCharge ?? parsed);
+        this.deliveryChargeInput = String(this.deliveryCharge);
+        this.savingDeliveryCharge = false;
+      },
+      error: e => {
+        this.savingDeliveryCharge = false;
+        this.deliveryChargeError = this.errorMessage(e, 'Unable to update the delivery settings.');
+      }
+    });
   }
 
   loadReturns(){

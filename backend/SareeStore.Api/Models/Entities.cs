@@ -119,12 +119,24 @@ public class Address
     public List<Order> Orders { get; set; } = [];
 }
 
+public class ApplicationSetting
+{
+    public int Id { get; set; }
+    public string Key { get; set; } = "";
+    public decimal Value { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public string? UpdatedBy { get; set; }
+}
+
 public class Order
 {
     public int Id { get; set; }
     public int UserId { get; set; }
     public int AddressId { get; set; }
     public string? RazorpayOrderId { get; set; }
+    public decimal Subtotal { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public decimal DeliveryCharge { get; set; }
     public decimal TotalAmount { get; set; }
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;

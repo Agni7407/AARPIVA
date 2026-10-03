@@ -31,8 +31,13 @@ import { AuthService } from '../../core/auth.service';
           </button>
         </form>
 
-        <a *ngIf="mode === 'login'" class="forgot-link" routerLink="/forgot-password">Forgot password?</a>
-        <a class="switch-link" (click)="switchMode()">{{ mode === 'login' ? 'New here? Create an account' : 'Already registered? Login' }}</a>
+        <div class="auth-links">
+          <a *ngIf="mode === 'login'" class="forgot-link" routerLink="/forgot-password">Forgot password?</a>
+          <div class="register-link">
+            <span *ngIf="mode === 'login'">New here?</span>
+            <a class="switch-link" (click)="switchMode()">{{ mode === 'login' ? 'Create an account' : 'Already registered? Login' }}</a>
+          </div>
+        </div>
       </div>
 
       <div class="card" *ngIf="mode === 'verify'">
@@ -83,6 +88,7 @@ import { AuthService } from '../../core/auth.service';
     </section>
   `,
   styles: [`
+    .auth-links{margin-top:30px;text-align:center}.auth .card .auth-links .forgot-link{display:block;margin:0 auto 18px}.register-link{display:flex;justify-content:center;align-items:center;gap:5px}.auth-links a{color:#111;text-decoration:underline;cursor:pointer}.auth-links a:hover{opacity:.65}
     .auth{min-height:650px;display:grid;place-items:center;background:var(--peach);padding:40px}.card{width:min(460px,100%);background:#fff;padding:40px;box-shadow:0 20px 60px #0000000d}.card h1{font:600 42px 'Playfair Display';margin:8px 0 12px}.card p{color:var(--muted);line-height:1.5}.message,.verify-message{margin-top:10px;padding:12px 14px;background:#fff4f4;border:1px solid #edcdcd;color:#8b3030;line-height:1.5}.success-message{background:#eef8f0;border-color:#cee5d2;color:#315d39}.verify-link,.forgot-link{border:0;background:none;padding:0;margin:12px 0 0;text-decoration:underline;font-weight:700;cursor:pointer}.forgot-link{display:inline-block;margin-top:-8px}.card form{display:grid;gap:16px;margin:25px 0}.card label{display:grid;gap:7px;font-weight:600}.card input{padding:13px;border:1px solid var(--line);font:inherit;box-sizing:border-box}.switch-link{cursor:pointer;text-decoration:underline;display:inline-block}.full{width:100%}.auth-submit{width:100%;min-height:52px;display:flex;align-items:center;justify-content:center;padding:0 20px;font-size:15px;font-weight:700;cursor:pointer}.auth-submit:disabled{opacity:.5;cursor:not-allowed}.terms-check{display:flex!important;gap:9px!important;align-items:flex-start;font-size:12px;font-weight:400!important;line-height:1.5}.terms-check input{margin-top:3px}.terms-check a{text-decoration:underline}.otp-area{display:grid;gap:14px;margin-top:24px}.otp-input{width:100%;box-sizing:border-box;text-align:center;font-size:28px;letter-spacing:10px;font-weight:800;padding:16px 12px!important}.text-button{border:0;background:none;text-decoration:underline;font:inherit;cursor:pointer;padding:6px}.text-button:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}.reset-actions{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}@media(max-width:600px){.auth{padding:24px 16px;min-height:calc(100svh - 66px);align-items:start;padding-top:44px}.card{padding:26px 20px;border-radius:2px}.card h1{font-size:34px;line-height:1.05}.card form{gap:14px;margin:22px 0}.card input{min-height:48px}.auth-submit{min-height:50px;font-size:14px}.card a,.text-button{font-size:13px}.otp-input{font-size:24px;letter-spacing:7px}}@media(max-width:380px){.auth{padding-left:12px;padding-right:12px;padding-top:28px}.card{padding:22px 16px}.card h1{font-size:30px}}
   `]
 })

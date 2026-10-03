@@ -123,13 +123,14 @@ public class NotificationService(IEmailSender email, ILogger<NotificationService
     public Task SendPaymentSuccessAsync(Order order)
     {
         var lines = string.Join("", order.Items.Select(i => $"<tr><td style='padding:8px 0'>{Esc(i.ProductName)}</td><td style='padding:8px 0'>x{i.Quantity}</td><td style='padding:8px 0;text-align:right'>{Money(i.UnitPrice * i.Quantity)}</td></tr>"));
+        var deliveryLabel = order.DeliveryCharge == 0m ? "FREE" : Money(order.DeliveryCharge);
         var html = $"""
         <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
           <h2>AARPIVA payment successful</h2>
           <p>Hello {Esc(order.User.Name)},</p>
           <p>Your payment for order <strong>#{order.Id}</strong> has been verified successfully.</p>
           <table style='width:100%;border-collapse:collapse'>{lines}</table>
-          <p style='border-top:1px solid #ddd;padding-top:12px'><strong>Total paid: {Money(order.TotalAmount)}</strong></p>
+          <p style='border-top:1px solid #ddd;padding-top:12px'>Subtotal: {Money(order.Subtotal)}<br />Discount: -{Money(order.DiscountAmount)}<br />Delivery: {deliveryLabel}<br /><strong>Total paid: {Money(order.TotalAmount)}</strong></p>
           <p>Your order status is now <strong>Confirmed</strong>.</p>
         </div>
         """;
@@ -138,12 +139,13 @@ public class NotificationService(IEmailSender email, ILogger<NotificationService
 
     public Task SendOrderStatusAsync(Order order)
     {
+        var deliveryLabel = order.DeliveryCharge == 0m ? "FREE" : Money(order.DeliveryCharge);
         var html = $"""
         <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
           <h2>AARPIVA order update</h2>
           <p>Hello {Esc(order.User.Name)},</p>
           <p>Your order <strong>#{order.Id}</strong> is now <strong>{Esc(order.Status.ToString())}</strong>.</p>
-          <p>Order total: <strong>{Money(order.TotalAmount)}</strong></p>
+          <p>Subtotal: {Money(order.Subtotal)}<br />Discount: -{Money(order.DiscountAmount)}<br />Delivery: {deliveryLabel}<br />Order total: <strong>{Money(order.TotalAmount)}</strong></p>
           <p>Open AARPIVA to view the latest tracking status and order details.</p>
         </div>
         """;

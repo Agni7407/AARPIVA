@@ -108,6 +108,18 @@ export class ApiService {
     return this.http.post<Order>(`${this.base}/orders`, body);
   }
 
+  checkoutSummary() {
+    return this.http.get<{ subtotal: number; discountAmount: number; deliveryCharge: number; total: number }>(`${this.base}/checkout/summary`);
+  }
+
+  adminDeliveryCharge() {
+    return this.http.get<{ deliveryCharge: number }>(`${this.base}/admin/settings/delivery-charge`);
+  }
+
+  updateAdminDeliveryCharge(deliveryCharge: number) {
+    return this.http.put<{ deliveryCharge: number; message: string }>(`${this.base}/admin/settings/delivery-charge`, { deliveryCharge });
+  }
+
   myOrders() {
     return this.http.get<Order[]>(`${this.base}/orders/mine`);
   }

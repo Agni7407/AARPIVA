@@ -26,24 +26,37 @@ public class OrdersController(AppDbContext db, INotificationService notification
         if (cartItems.Count == 0) return BadRequest("Your bag is empty.");
 
         var order = new Order { UserId = userId, AddressId = address.Id };
+        var subtotal = 0m;
+        var discountAmount = 0m;
         foreach (var line in cartItems)
         {
             var p = line.Product;
             if (!p.IsActive) return BadRequest($"{p.Name} is no longer available.");
             if (p.Stock < line.Quantity) return BadRequest($"Insufficient stock for {p.Name}.");
 
-            var price = p.DiscountPrice ?? p.Price;
+            var unitPrice = p.DiscountPrice ?? p.Price;
+            var discount = Math.Max(0m, p.Price - unitPrice) * line.Quantity;
+            subtotal += unitPrice * line.Quantity;
+            discountAmount += discount;
+
             order.Items.Add(new OrderItem
             {
                 ProductId = p.Id,
                 ProductName = p.Name,
-                UnitPrice = price,
+                UnitPrice = unitPrice,
                 Quantity = line.Quantity
             });
-            order.TotalAmount += price * line.Quantity;
         }
 
-        if (order.TotalAmount < 1499m) order.TotalAmount += 99m;
+        var deliveryCharge = await db.ApplicationSettings
+            .Where(x => x.Key == "DeliveryCharge")
+            .Select(x => x.Value)
+            .FirstOrDefaultAsync();
+
+        order.Subtotal = subtotal;
+        order.DiscountAmount = discountAmount;
+        order.DeliveryCharge = deliveryCharge;
+        order.TotalAmount = subtotal - discountAmount + deliveryCharge;
 
         db.Orders.Add(order);
         await db.SaveChangesAsync();
@@ -120,7 +133,7 @@ public class OrdersController(AppDbContext db, INotificationService notification
     }
 
     private static OrderListResponse ToResponse(Order o, IEnumerable<ReturnRequest> returns) =>
-        new(o.Id, o.TotalAmount, o.Status, o.PaymentStatus, o.CreatedAt,
+        new(o.Id, o.Subtotal, o.DiscountAmount, o.DeliveryCharge, o.TotalAmount, o.Status, o.PaymentStatus, o.CreatedAt,
             o.Items.Select(i => new OrderItemResponse(i.Id, i.ProductId, i.ProductName, i.UnitPrice, i.Quantity)).ToList(),
             new AddressResponse(o.Address.Id, o.Address.RecipientName, o.Address.Phone, o.Address.AddressLine1, o.Address.AddressLine2, o.Address.City, o.Address.State, o.Address.Pincode),
             returns.Select(r => ToReturnResponse(r, o.Items.First(i => i.Id == r.OrderItemId))).ToList());
