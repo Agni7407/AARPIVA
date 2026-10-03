@@ -54,7 +54,7 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
         };
 
         var uploadUrl = s3.GetPreSignedURL(request);
-        var publicUrl = BuildPublicUrl(publicBaseUrl, objectKey);
+        var publicUrl = BuildPublicUrl(publicBaseUrl, bucket, objectKey);
         return new R2UploadTicket(uploadUrl, objectKey, publicUrl, 900);
     }
 
@@ -89,7 +89,11 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
             if (expectedSizeBytes != actualSize)
                 throw new InvalidOperationException("The uploaded image size did not match the requested upload.");
 
-            return new R2UploadFinalizeResult(objectKey, BuildPublicUrl(publicBaseUrl, objectKey), actualType, actualSize);
+            return new R2UploadFinalizeResult(
+                objectKey,
+                BuildPublicUrl(publicBaseUrl, bucket, objectKey),
+                actualType,
+                actualSize);
         }
         catch
         {
@@ -157,7 +161,10 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
             throw new InvalidOperationException("Only JPEG, PNG, WEBP and AVIF images are supported.");
     }
 
-    private static string BuildPublicUrl(string publicBaseUrl, string objectKey)
+    private static string BuildPublicUrl(
+        string publicBaseUrl,
+        string bucket,
+        string objectKey)
     {
         var encodedKey = string.Join(
             "/",
@@ -165,7 +172,7 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
                 .Split('/', StringSplitOptions.RemoveEmptyEntries)
                 .Select(Uri.EscapeDataString));
 
-        return $"{publicBaseUrl.TrimEnd('/')}/{encodedKey}";
+        return $"{publicBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(bucket)}/{encodedKey}";
     }
 
     public void Dispose()
