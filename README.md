@@ -59,3 +59,8 @@ Two deliberate V1 limitations remain documented rather than being hidden: the cu
 
 ## Payment lifecycle
 See `docs/CHANGES-PAYMENT-FLOW.md` for the server-side cart + Razorpay payment draft lifecycle and cancellation behavior.
+
+
+## Account security and legal pages
+
+The production frontend includes Brevo OTP password reset, authenticated password change, Terms & Conditions / Privacy Policy pages, and the AARPIVA contact page. See `docs/ACCOUNT-SECURITY-AND-LEGAL-PAGES.md`.

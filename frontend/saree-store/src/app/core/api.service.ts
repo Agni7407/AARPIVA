@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Category, Product, Address, Order, CartItem } from './models';
 import { environment } from '../../environments/environment';
 
@@ -46,6 +46,22 @@ export class ApiService {
 
   resendOtp(email: string) {
     return this.http.post(`${this.base}/auth/resend-otp`, { email });
+  }
+
+  forgotPassword(email: string) {
+    return this.http.post(`${this.base}/auth/forgot-password`, { email });
+  }
+
+  resendPasswordResetOtp(email: string) {
+    return this.http.post(`${this.base}/auth/resend-password-reset-otp`, { email });
+  }
+
+  resetPassword(email: string, otp: string, newPassword: string) {
+    return this.http.post(`${this.base}/auth/reset-password`, { email, otp, newPassword });
+  }
+
+  changePassword(currentPassword: string, newPassword: string) {
+    return this.http.post(`${this.base}/auth/change-password`, { currentPassword, newPassword });
   }
 
   cart() {
@@ -106,6 +122,23 @@ export class ApiService {
 
   cancelPayment(orderId: number) {
     return this.http.post(`${this.base}/payments/cancel`, { orderId });
+  }
+
+  createImageUploadUrl(contentType: string, sizeBytes: number) {
+    return this.http.post<any>(`${this.base}/admin/media/upload-url`, { contentType, sizeBytes });
+  }
+
+  uploadImageToR2(uploadUrl: string, file: File) {
+    const headers = new HttpHeaders({ 'Content-Type': file.type });
+    return this.http.put(uploadUrl, file, { headers, responseType: 'text' });
+  }
+
+  completeImageUpload(objectKey: string, contentType: string, sizeBytes: number) {
+    return this.http.post<any>(`${this.base}/admin/media/complete`, { objectKey, contentType, sizeBytes });
+  }
+
+  deleteImageFromR2(objectKey: string) {
+    return this.http.delete(`${this.base}/admin/media`, { body: { objectKey } });
   }
 
   verifyPayment(body: unknown) {

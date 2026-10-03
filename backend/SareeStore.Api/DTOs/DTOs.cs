@@ -3,13 +3,17 @@ using SareeStore.Api.Models;
 
 namespace SareeStore.Api.DTOs;
 
-public record RegisterRequest([Required, MinLength(2)] string Name, [Required, EmailAddress] string Email, [Required, MinLength(8)] string Password);
+public record RegisterRequest([Required, MinLength(2)] string Name, [Required, EmailAddress] string Email, [Required, MinLength(8)] string Password, bool AcceptTerms = false);
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 public record AuthResponse(string Token, int UserId, string Name, string Email, string Role, bool IsEmailVerified);
 public record VerifyEmailRequest([Required] string Token);
 public record ResendVerificationRequest([Required, EmailAddress] string Email);
 public record VerifyOtpRequest([Required, EmailAddress] string Email, [Required, RegularExpression("^[0-9]{6}$")] string Otp);
 public record ResendOtpRequest([Required, EmailAddress] string Email);
+public record ForgotPasswordRequest([Required, EmailAddress] string Email);
+public record ResendPasswordResetOtpRequest([Required, EmailAddress] string Email);
+public record ResetPasswordRequest([Required, EmailAddress] string Email, [Required, RegularExpression("^[0-9]{6}$")] string Otp, [Required, MinLength(8)] string NewPassword);
+public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(8)] string NewPassword);
 
 public record CategoryRequest([Required, MinLength(2)] string Name, bool IsActive = true);
 public record CategoryResponse(int Id, string Name, string Slug, bool IsActive);

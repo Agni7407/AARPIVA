@@ -35,3 +35,13 @@ services:
         sync: false
       - key: Razorpay__ApiBaseUrl
         value: https://api.razorpay.com/v1
+      - key: CloudflareR2__AccessKey
+        sync: false
+      - key: CloudflareR2__SecretKey
+        sync: false
+      - key: CloudflareR2__Bucket
+        value: aarpiva-products
+      - key: CloudflareR2__Endpoint
+        sync: false
+      - key: CloudflareR2__PublicBaseUrl
+        value: https://images.aarpiva.com

@@ -192,19 +192,28 @@ import { Router } from '@angular/router';
               <label>
                 {{image.mode === 'repo'
                   ? 'Repository image path'
-                  : 'CDN image URL'}}
+                  : 'Cloudflare image'}}
 
                 <span *ngIf="i === 0">(Main image)</span>
               </label>
 
               <input
+                *ngIf="image.mode === 'repo'"
                 [(ngModel)]="image.url"
                 [name]="'imageUrl' + i"
-                [placeholder]="
-                  image.mode === 'repo'
-                    ? '/assets/products/red-saree-front.jpg'
-                    : 'https://images.yourdomain.com/products/red-saree-front.jpg'
-                ">
+                placeholder="/assets/products/red-saree-front.jpg">
+
+              <div *ngIf="image.mode === 'cdn'" class="upload-control">
+                <input
+                  type="file"
+                  [name]="'imageFile' + i"
+                  accept="image/jpeg,image/png,image/webp,image/avif"
+                  (change)="uploadProductImage($event, i)"
+                  [disabled]="!!image.uploading">
+                <small *ngIf="image.uploading">Uploading to Cloudflare…</small>
+                <small *ngIf="image.uploadError" class="upload-error">{{image.uploadError}}</small>
+                <small *ngIf="image.url && !image.uploading" class="upload-success">Uploaded to images.aarpiva.com</small>
+              </div>
 
             </div>
 
@@ -251,7 +260,7 @@ import { Router } from '@angular/router';
           </label>
 
           <div class="form-actions bottom-actions">
-            <button class="btn dark" type="submit" [disabled]="!categories.length || !editingProduct.categoryId">{{editingProduct.id ? 'Update product' : 'Save product'}}</button>
+            <button class="btn dark" type="submit" [disabled]="!categories.length || !editingProduct.categoryId || productImageUploadInFlight > 0">{{editingProduct.id ? 'Update product' : 'Save product'}}</button>
             <button type="button" class="btn light" (click)="editingProduct=null">Cancel</button>
           </div>
         </form>
@@ -445,6 +454,7 @@ import { Router } from '@angular/router';
     .image-url-field{
       min-width:0;
     }
+    .upload-control{display:grid;gap:6px}.upload-control input[type=file]{padding:9px 10px;background:#fff}.upload-success{color:#24742a}.upload-error{color:#9b2c2c}.upload-control small{font-size:11px}
 
     .product-image-row .image-preview{
       width:100px;
@@ -549,6 +559,7 @@ export class AdminComponent {
   returnsLoadError = '';
   returnStatuses = ['Requested','Approved','Rejected','Received','Refunded','Cancelled'];
   returnStatusSaving: Record<number, boolean> = {};
+  productImageUploadInFlight = 0;
 
   constructor() {
     if (!this.auth.isAdmin()) {
@@ -680,7 +691,7 @@ export class AdminComponent {
       price: 0,
       discountPrice: null,
       stock: 0,
-      images: [{ mode: 'repo', url: '' }],
+      images: [{ mode: 'repo', url: '', uploading: false, uploadError: '' }],
       description: '',
       isActive: true,
     };
@@ -694,7 +705,9 @@ export class AdminComponent {
 
       images: (p.images?.length ? p.images : ['']).map((url: string) => ({
         url,
-        mode: /^https?:\/\//i.test(url) ? 'cdn' : 'repo'
+        mode: /^https?:\/\//i.test(url) ? 'cdn' : 'repo',
+        uploading: false,
+        uploadError: ''
       }))
     };
   }
@@ -702,7 +715,9 @@ export class AdminComponent {
   addProductImage() {
     this.editingProduct.images.push({
       url: '',
-      mode: 'repo'
+      mode: 'repo',
+      uploading: false,
+      uploadError: ''
     });
   }
 
@@ -712,6 +727,69 @@ export class AdminComponent {
     }
 
     this.editingProduct.images.splice(index, 1);
+  }
+
+  uploadProductImage(event: Event, index: number) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.editingProduct?.images?.[index]) return;
+
+    const image = this.editingProduct.images[index];
+    image.uploading = true;
+    image.uploadError = '';
+
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      image.uploading = false;
+      image.uploadError = 'Images must be between 1 byte and 10 MB.';
+      input.value = '';
+      return;
+    }
+
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+    if (!allowed.has(file.type.toLowerCase())) {
+      image.uploading = false;
+      image.uploadError = 'Only JPEG, PNG, WEBP and AVIF images are supported.';
+      input.value = '';
+      return;
+    }
+
+    this.productImageUploadInFlight++;
+    this.api.createImageUploadUrl(file.type, file.size).subscribe({
+      next: (ticket: any) => {
+        this.api.uploadImageToR2(ticket.uploadUrl, file).subscribe({
+          next: () => {
+            this.api.completeImageUpload(ticket.objectKey, file.type, file.size).subscribe({
+              next: (result: any) => {
+                image.url = result.publicUrl;
+                image.uploading = false;
+                image.uploadError = '';
+                this.productImageUploadInFlight = Math.max(0, this.productImageUploadInFlight - 1);
+                input.value = '';
+              },
+              error: err => {
+                image.uploading = false;
+                image.uploadError = this.errorMessage(err, 'Cloudflare could not finalize the upload.');
+                this.productImageUploadInFlight = Math.max(0, this.productImageUploadInFlight - 1);
+                input.value = '';
+              }
+            });
+          },
+          error: err => {
+            image.uploading = false;
+            image.uploadError = 'Cloudflare upload failed. Please try again.';
+            this.productImageUploadInFlight = Math.max(0, this.productImageUploadInFlight - 1);
+            console.error(err);
+            input.value = '';
+          }
+        });
+      },
+      error: err => {
+        image.uploading = false;
+        image.uploadError = this.errorMessage(err, 'Could not create a secure upload URL.');
+        this.productImageUploadInFlight = Math.max(0, this.productImageUploadInFlight - 1);
+        input.value = '';
+      }
+    });
   }
 
   saveProduct() {

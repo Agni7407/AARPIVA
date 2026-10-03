@@ -251,7 +251,6 @@ export class ProductsComponent {
     this.router.navigate([], { relativeTo:this.route, queryParams:{sort:this.sort}, queryParamsHandling:'merge' });
   }
   applySort(items:Product[]){const x=[...items];if(this.sort==='price-low')return x.sort((a,b)=>(a.discountPrice??a.price)-(b.discountPrice??b.price));if(this.sort==='price-high')return x.sort((a,b)=>(b.discountPrice??b.price)-(a.discountPrice??a.price));return x}
-  productLink(product: Product){return ['/products', product.id];}
   image(p:Product,i:number){return this.resolveImage(p.images?.[0] || this.fallbacks[i%6]);}
   resolveImage(src:string){if(/^(https?:)?\/\//i.test(src))return src;return src.startsWith('/')?src:`/${src}`;}
   addToCart(p:Product,event:Event){event.preventDefault();event.stopPropagation();this.cart.add(p,1)}

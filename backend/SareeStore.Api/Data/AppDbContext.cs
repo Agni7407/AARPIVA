@@ -8,6 +8,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<EmailVerificationOtp> EmailVerificationOtps => Set<EmailVerificationOtp>();
+    public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();

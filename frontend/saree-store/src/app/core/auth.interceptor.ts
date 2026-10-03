@@ -3,13 +3,16 @@ import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { inject } from '@angular/core';
 import { AuthService } from './auth.service';
+import { environment } from '../../environments/environment';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   const token = auth.token();
+  const apiOrigin = environment.apiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+  const isApiRequest = req.url.startsWith(apiOrigin + '/') || req.url === apiOrigin;
 
-  const request = token
+  const request = token && isApiRequest
     ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
     : req;
 

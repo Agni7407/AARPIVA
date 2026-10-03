@@ -11,21 +11,33 @@ using SareeStore.Api.Services;
 namespace SareeStore.Api.Controllers;
 
 [ApiController, Route("api/auth")]
-public class AuthController(AppDbContext db, IConfiguration cfg, IEmailSender email, ILogger<AuthController> logger) : ControllerBase
+public class AuthController(
+    AppDbContext db,
+    IConfiguration cfg,
+    IEmailSender email,
+    ILogger<AuthController> logger) : ControllerBase
 {
+    private const string TermsVersion = "2026-10-03";
+
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<ActionResult> Register(RegisterRequest req)
     {
+        if (!req.AcceptTerms)
+            return BadRequest("Please accept the Terms & Conditions and Privacy Policy to create an account.");
+
         var normalized = req.Email.Trim().ToLowerInvariant();
-        if (await db.Users.AnyAsync(x => x.Email == normalized)) return Conflict("Email already registered.");
+        if (await db.Users.AnyAsync(x => x.Email == normalized))
+            return Conflict("Email already registered.");
 
         var user = new AppUser
         {
             Name = req.Name.Trim(),
             Email = normalized,
             PasswordHash = PasswordHasher.Hash(req.Password),
-            IsEmailVerified = false
+            IsEmailVerified = false,
+            TermsAcceptedAt = DateTime.UtcNow,
+            TermsVersion = TermsVersion
         };
 
         db.Users.Add(user);
@@ -94,6 +106,136 @@ public class AuthController(AppDbContext db, IConfiguration cfg, IEmailSender em
         return Ok(new { message = "A new verification code has been sent." });
     }
 
+    [EnableRateLimiting("auth")]
+    [HttpPost("forgot-password")]
+    public async Task<ActionResult> ForgotPassword(ForgotPasswordRequest req)
+    {
+        var normalized = req.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == normalized);
+
+        if (user is not null)
+        {
+            await TryCreateAndSendPasswordResetOtp(user);
+        }
+
+        return Ok(new
+        {
+            message = "If an account exists for this email, a password reset code has been sent."
+        });
+    }
+
+    [EnableRateLimiting("auth")]
+    [HttpPost("resend-password-reset-otp")]
+    public async Task<ActionResult> ResendPasswordResetOtp(ResendPasswordResetOtpRequest req)
+    {
+        var normalized = req.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == normalized);
+
+        if (user is null)
+        {
+            return Ok(new { message = "If an account exists for this email, a new password reset code has been sent." });
+        }
+
+        var latest = await db.PasswordResetOtps
+            .Where(x => x.UserId == user.Id)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (latest is not null && latest.CreatedAt > DateTime.UtcNow.AddSeconds(-60))
+            return BadRequest("Please wait 60 seconds before requesting another code.");
+
+        await TryCreateAndSendPasswordResetOtp(user);
+        return Ok(new { message = "If an account exists for this email, a new password reset code has been sent." });
+    }
+
+    [EnableRateLimiting("auth")]
+    [HttpPost("reset-password")]
+    public async Task<ActionResult> ResetPassword(ResetPasswordRequest req)
+    {
+        var normalized = req.Email.Trim().ToLowerInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == normalized);
+        if (user is null) return BadRequest("Invalid or expired reset code.");
+
+        var item = await db.PasswordResetOtps
+            .Where(x => x.UserId == user.Id && !x.Used && x.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (item is null) return BadRequest("This reset code has expired. Request a new code.");
+
+        item.Attempts++;
+        if (item.Attempts > 5)
+        {
+            item.Used = true;
+            await db.SaveChangesAsync();
+            return BadRequest("Too many incorrect attempts. Request a new code.");
+        }
+
+        var suppliedHash = OtpService.Hash(req.Otp.Trim());
+        if (!CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(item.OtpHash),
+                System.Text.Encoding.UTF8.GetBytes(suppliedHash)))
+        {
+            await db.SaveChangesAsync();
+            return BadRequest("Invalid reset code.");
+        }
+
+        var activeResetCodes = await db.PasswordResetOtps
+            .Where(x => x.UserId == user.Id && !x.Used)
+            .ToListAsync();
+        foreach (var code in activeResetCodes) code.Used = true;
+
+        user.PasswordHash = PasswordHasher.Hash(req.NewPassword);
+        user.IsEmailVerified = true;
+        await db.SaveChangesAsync();
+
+        try
+        {
+            await email.SendAsync(
+                user.Email,
+                "Your AARPIVA password was changed",
+                BuildPasswordChangedEmail(user.Name));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Password reset succeeded but notification email failed for {Email}", user.Email);
+        }
+
+        return Ok(new { message = "Your password has been reset successfully. You can now log in with your new password." });
+    }
+
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<ActionResult> ChangePassword(ChangePasswordRequest req)
+    {
+        var userId = ApiHelper.UserId(User);
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        if (user is null) return Unauthorized("Your session is no longer valid.");
+
+        if (!PasswordHasher.Verify(req.CurrentPassword, user.PasswordHash))
+            return BadRequest("Your current password is incorrect.");
+
+        if (PasswordHasher.Verify(req.NewPassword, user.PasswordHash))
+            return BadRequest("Your new password must be different from your current password.");
+
+        user.PasswordHash = PasswordHasher.Hash(req.NewPassword);
+        await db.SaveChangesAsync();
+
+        try
+        {
+            await email.SendAsync(
+                user.Email,
+                "Your AARPIVA password was changed",
+                BuildPasswordChangedEmail(user.Name));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Password changed but notification email failed for {Email}", user.Email);
+        }
+
+        return Ok(new { message = "Password changed successfully." });
+    }
+
     // Backward-compatible link verification for older accounts/emails.
     [HttpPost("verify-email")]
     public async Task<ActionResult> VerifyLegacy(VerifyEmailRequest req)
@@ -147,9 +289,7 @@ public class AuthController(AppDbContext db, IConfiguration cfg, IEmailSender em
 
         var html = $"""
         <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
-          <div style='padding:28px;background:#f7f4ef'>
-            <div style='font-size:24px;font-weight:800;letter-spacing:.12em'>AARPIVA</div>
-          </div>
+          <div style='padding:28px;background:#f7f4ef'><div style='font-size:24px;font-weight:800;letter-spacing:.12em'>AARPIVA</div></div>
           <div style='padding:28px;background:#fff'>
             <h2>Your verification code</h2>
             <p>Hello {System.Net.WebUtility.HtmlEncode(user.Name)},</p>
@@ -171,4 +311,54 @@ public class AuthController(AppDbContext db, IConfiguration cfg, IEmailSender em
             throw new InvalidOperationException("Your account was created, but the verification email could not be sent. Please configure Brevo and use Resend OTP.", ex);
         }
     }
+
+    private async Task TryCreateAndSendPasswordResetOtp(AppUser user)
+    {
+        try
+        {
+            var active = await db.PasswordResetOtps.Where(x => x.UserId == user.Id && !x.Used).ToListAsync();
+            foreach (var item in active) item.Used = true;
+
+            var otp = OtpService.Generate();
+            db.PasswordResetOtps.Add(new PasswordResetOtp
+            {
+                UserId = user.Id,
+                OtpHash = OtpService.Hash(otp),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(10)
+            });
+            await db.SaveChangesAsync();
+
+            var html = $"""
+            <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
+              <div style='padding:28px;background:#f7f4ef'><div style='font-size:24px;font-weight:800;letter-spacing:.12em'>AARPIVA</div></div>
+              <div style='padding:28px;background:#fff'>
+                <h2>Password reset code</h2>
+                <p>Hello {System.Net.WebUtility.HtmlEncode(user.Name)},</p>
+                <p>Use the 6-digit code below to reset your AARPIVA password:</p>
+                <div style='font-size:34px;font-weight:800;letter-spacing:10px;margin:24px 0'>{otp}</div>
+                <p>This code expires in <strong>10 minutes</strong> and can be used only once.</p>
+                <p>If you did not request a password reset, you can safely ignore this email.</p>
+              </div>
+            </div>
+            """;
+
+            await email.SendAsync(user.Email, "Your AARPIVA password reset code", html);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unable to send password reset OTP to {Email}", user.Email);
+        }
+    }
+
+    private static string BuildPasswordChangedEmail(string name) => $"""
+        <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
+          <div style='padding:28px;background:#f7f4ef'><div style='font-size:24px;font-weight:800;letter-spacing:.12em'>AARPIVA</div></div>
+          <div style='padding:28px;background:#fff'>
+            <h2>Your password was changed</h2>
+            <p>Hello {System.Net.WebUtility.HtmlEncode(name)},</p>
+            <p>Your AARPIVA account password was changed successfully.</p>
+            <p>If you did not make this change, contact AARPIVA support immediately at <a href='mailto:aarpiva1801@gmail.com'>aarpiva1801@gmail.com</a>.</p>
+          </div>
+        </div>
+        """;
 }

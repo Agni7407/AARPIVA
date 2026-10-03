@@ -17,6 +17,8 @@ public class AppUser
     public List<Address> Addresses { get; set; } = [];
     public List<Order> Orders { get; set; } = [];
     public List<CartItem> CartItems { get; set; } = [];
+    public DateTime? TermsAcceptedAt { get; set; }
+    public string? TermsVersion { get; set; }
 }
 
 public class EmailVerificationToken
@@ -30,6 +32,18 @@ public class EmailVerificationToken
 }
 
 public class EmailVerificationOtp
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string OtpHash { get; set; } = "";
+    public DateTime ExpiresAt { get; set; }
+    public int Attempts { get; set; }
+    public bool Used { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public AppUser User { get; set; } = null!;
+}
+
+public class PasswordResetOtp
 {
     public int Id { get; set; }
     public int UserId { get; set; }

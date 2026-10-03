@@ -43,7 +43,7 @@ export class CartService {
 
         const sync$ = guestLines.length
           ? this.api.syncCart(guestLines)
-          : of([] as CartItem[]);
+          : of(null);
 
         return sync$.pipe(
           switchMap(() => this.api.cart()),
