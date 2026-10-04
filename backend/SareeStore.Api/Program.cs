@@ -118,6 +118,17 @@ static async Task EnsureLegalSchemaAsync(AppDbContext db)
     """);
 }
 
+static async Task EnsureCategoryImageSchemaAsync(AppDbContext db)
+{
+    await db.Database.ExecuteSqlRawAsync("""
+        ALTER TABLE "Categories" ADD COLUMN IF NOT EXISTS "ImageMode" text NOT NULL DEFAULT 'auto';
+        ALTER TABLE "Categories" ADD COLUMN IF NOT EXISTS "ImageUrl" text NULL;
+        UPDATE "Categories" SET "ImageMode" = 'auto' WHERE "ImageMode" IS NULL OR BTRIM("ImageMode") = '';
+        ALTER TABLE "Categories" ALTER COLUMN "ImageMode" SET DEFAULT 'auto';
+        ALTER TABLE "Categories" ALTER COLUMN "ImageMode" SET NOT NULL;
+    """);
+}
+
 
 static async Task EnsureCartSchemaAsync(AppDbContext db)
 {
@@ -219,6 +230,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.EnsureCreatedAsync();
+    await EnsureCategoryImageSchemaAsync(db);
     await EnsureEmailVerificationOtpSchemaAsync(db);
     await EnsurePasswordResetOtpSchemaAsync(db);
     await EnsureLegalSchemaAsync(db);

@@ -3,6 +3,9 @@ export interface Category {
   name: string;
   slug: string;
   isActive: boolean;
+  imageMode?: 'auto' | 'custom';
+  imageUrl: string | null;
+  resolvedImageUrl?: string | null;
 }
 
 export interface Product {

@@ -76,7 +76,7 @@ import { Router } from '@angular/router';
             <h2>Categories</h2>
             <p class="panel-subtitle">Create the groups your products belong to, such as Sarees or Kurties.</p>
           </div>
-          <button class="btn dark" type="button" (click)="editingCat={name:'',isActive:true}">Add category</button>
+          <button class="btn dark" type="button" (click)="newCategory()">Add category</button>
         </div>
 
         <form *ngIf="editingCat" class="inline-form" (ngSubmit)="saveCategory()">
@@ -85,9 +85,34 @@ import { Router } from '@angular/router';
             <input id="catName" [(ngModel)]="editingCat.name" name="catName" placeholder="e.g. Sarees" required>
           </div>
           <label class="check-line"><input type="checkbox" [(ngModel)]="editingCat.isActive" name="catActive"> Show this category in the store</label>
+          <div class="category-image-settings">
+            <div class="section-title">Category image</div>
+            <div class="category-image-options">
+              <label class="source-option category-image-option" [class.selected]="editingCat.imageMode==='auto'">
+                <input type="radio" [(ngModel)]="editingCat.imageMode" name="categoryImageMode" value="auto">
+                <span><strong>Use product image automatically</strong></span>
+              </label>
+              <label class="source-option category-image-option" [class.selected]="editingCat.imageMode==='custom'">
+                <input type="radio" [(ngModel)]="editingCat.imageMode" name="categoryImageMode" value="custom">
+                <span><strong>Upload custom category image</strong><small>Upload a dedicated image for this category.</small></span>
+              </label>
+            </div>
+            <div class="category-image-upload field" *ngIf="editingCat.imageMode==='custom'">
+              <label for="categoryImageFile">Custom category image</label>
+              <input id="categoryImageFile" type="file" accept="image/jpeg,image/png,image/webp,image/avif" [disabled]="categoryImageUploading" (change)="uploadCategoryImage($event)">
+              <small *ngIf="categoryImageUploading">Uploading to Cloudflare…</small>
+              <small *ngIf="categoryImageUploadError" class="upload-error">{{categoryImageUploadError}}</small>
+            </div>
+            <p class="category-image-hint" *ngIf="editingCat.imageMode==='auto'">Uses the first image from an active product in this category.</p>
+            <div class="category-image-preview" *ngIf="categoryImagePreview">
+              <img [src]="resolveImage(categoryImagePreview)" [alt]="editingCat.name + ' category image'" (error)="categoryImagePreviewError()">
+            </div>
+            <div class="category-image-placeholder" *ngIf="!categoryImagePreview" aria-label="No category image available yet">No image available yet</div>
+            <div *ngIf="categorySaveError" class="alert error">{{categorySaveError}}</div>
+          </div>
           <div class="form-actions">
-            <button class="btn dark" type="submit">Save category</button>
-            <button type="button" class="btn light" (click)="editingCat=null">Cancel</button>
+            <button class="btn dark" type="submit" [disabled]="categorySaving || categoryImageUploading">{{categorySaving ? 'Saving…' : 'Save category'}}</button>
+            <button type="button" class="btn light" [disabled]="categoryImageUploading" (click)="editingCat=null">Cancel</button>
           </div>
         </form>
 
@@ -96,7 +121,7 @@ import { Router } from '@angular/router';
           <div class="tr cat-row" *ngFor="let c of categories">
             <span class="strong">{{c.name}}</span>
             <span><span class="status" [class.hidden-status]="!c.isActive">{{c.isActive?'Active':'Hidden'}}</span></span>
-            <span><button type="button" (click)="editingCat={...c}">Edit</button><button type="button" (click)="deleteCategory(c.id)">Delete</button></span>
+            <span><button type="button" (click)="editCategory(c)">Edit</button><button type="button" (click)="deleteCategory(c.id)">Delete</button></span>
           </div>
           <div *ngIf="!categories.length" class="empty">No categories found. Add your first category above.</div>
         </div>
@@ -431,6 +456,7 @@ import { Router } from '@angular/router';
     <ng-template #denied><section class="denied"><h1>Admin access required.</h1></section></ng-template>
   `,
   styles: [`
+    .category-image-settings{flex:1 1 100%;min-width:0}.category-image-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}.category-image-options .category-image-option{width:100%;min-width:0;box-sizing:border-box}.category-image-options .category-image-option input[type=radio]{width:16px;height:16px;min-width:16px;flex:0 0 16px;margin:3px 0 0;padding:0;border:0;accent-color:#111}.category-image-options .category-image-option span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}.category-image-hint{margin:6px 0;color:var(--muted);font-size:12px}.category-image-upload{width:min(420px,100%);max-width:100%;min-width:0;margin:10px 0}.category-image-upload input[type=file]{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box}.category-image-preview{width:min(140px,100%);aspect-ratio:3/4;overflow:hidden;background:#eee}.category-image-preview img{display:block;width:100%;height:100%;object-fit:cover}.category-image-placeholder{display:grid;place-items:center;width:min(220px,100%);min-height:90px;padding:12px;background:#e7e3de;color:#68635d;text-align:center;font-size:12px}@media(max-width:600px){.category-image-settings{width:100%;min-width:0}.category-image-options{grid-template-columns:minmax(0,1fr)}.category-image-options .category-image-option{max-width:100%}.category-image-upload{width:100%;max-width:100%}.category-image-placeholder{max-width:100%}}
     .product-form .product-image-row .source-option input[type=radio]{width:16px;height:16px;min-width:16px;flex:0 0 16px;margin:3px 0 0;padding:0;border:0;accent-color:#111}.product-form .product-image-row .source-option span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
     .image-help{
       display:flex;
@@ -577,6 +603,10 @@ export class AdminComponent {
   statuses = ['Pending', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
   loadingCategories = false;
   categoryLoadError = '';
+  categoryImageUploading = false;
+  categoryImageUploadError = '';
+  categorySaveError = '';
+  categorySaving = false;
   adminLoadError = '';
   ordersLoadError = '';
   customersLoadError = '';
@@ -703,6 +733,83 @@ export class AdminComponent {
     return err?.error?.message || err?.error || fallback;
   }
 
+  get categoryImagePreview(): string | null {
+    if (!this.editingCat) return null;
+    return this.editingCat.imageMode === 'custom'
+      ? this.editingCat.imageUrl || null
+      : this.editingCat.resolvedImageUrl || null;
+  }
+
+  newCategory(): void {
+    this.categoryImageUploadError = '';
+    this.categorySaveError = '';
+    this.editingCat = { name: '', isActive: true, imageMode: 'auto', imageUrl: null, resolvedImageUrl: null };
+  }
+
+  editCategory(category: any): void {
+    this.categoryImageUploadError = '';
+    this.categorySaveError = '';
+    this.editingCat = {
+      ...category,
+      imageMode: category.imageMode === 'custom' ? 'custom' : 'auto',
+      imageUrl: category.imageMode === 'custom' ? category.imageUrl : null
+    };
+  }
+
+  categoryImagePreviewError(): void {
+    if (this.editingCat?.imageMode === 'custom') this.editingCat.imageUrl = null;
+    else if (this.editingCat) this.editingCat.resolvedImageUrl = null;
+  }
+
+  uploadCategoryImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.editingCat) return;
+
+    this.categoryImageUploadError = '';
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      this.categoryImageUploadError = 'Images must be between 1 byte and 10 MB.';
+      input.value = '';
+      return;
+    }
+
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+    if (!allowed.has(file.type.toLowerCase())) {
+      this.categoryImageUploadError = 'Only JPEG, PNG, WEBP and AVIF images are supported.';
+      input.value = '';
+      return;
+    }
+
+    this.categoryImageUploading = true;
+    this.api.createImageUploadUrl(file.type, file.size).subscribe({
+      next: (ticket: any) => this.api.uploadImageToR2(ticket.uploadUrl, file).subscribe({
+        next: () => this.api.completeImageUpload(ticket.objectKey, file.type, file.size).subscribe({
+          next: (result: any) => {
+            if (this.editingCat) this.editingCat.imageUrl = result.publicUrl;
+            this.categoryImageUploading = false;
+            input.value = '';
+          },
+          error: err => {
+            this.categoryImageUploading = false;
+            this.categoryImageUploadError = this.errorMessage(err, 'Cloudflare could not finalize the upload.');
+            input.value = '';
+          }
+        }),
+        error: err => {
+          this.categoryImageUploading = false;
+          this.categoryImageUploadError = 'Cloudflare upload failed. Please try again.';
+          console.error(err);
+          input.value = '';
+        }
+      }),
+      error: err => {
+        this.categoryImageUploading = false;
+        this.categoryImageUploadError = this.errorMessage(err, 'Could not create a secure upload URL.');
+        input.value = '';
+      }
+    });
+  }
+
   loadCategories() {
     this.loadingCategories = true;
     this.categoryLoadError = '';
@@ -724,12 +831,32 @@ export class AdminComponent {
 
   saveCategory() {
     const c = this.editingCat;
+    const imageMode = c.imageMode === 'custom' ? 'custom' : 'auto';
+    if (imageMode === 'custom' && !c.imageUrl) {
+      this.categorySaveError = 'Upload a custom category image or choose automatic product images.';
+      return;
+    }
+    this.categorySaveError = '';
+    this.categorySaving = true;
+    const body = {
+      name: c.name,
+      isActive: c.isActive,
+      imageMode,
+      imageUrl: imageMode === 'custom' ? c.imageUrl : null
+    };
     const call = c.id
-      ? this.api.updateCategory(c.id, { name: c.name, isActive: c.isActive })
-      : this.api.addCategory({ name: c.name, isActive: c.isActive });
-    call.subscribe(() => {
-      this.editingCat = null;
-      this.load();
+      ? this.api.updateCategory(c.id, body)
+      : this.api.addCategory(body);
+    call.subscribe({
+      next: () => {
+        this.categorySaving = false;
+        this.editingCat = null;
+        this.load();
+      },
+      error: err => {
+        this.categorySaving = false;
+        this.categorySaveError = this.errorMessage(err, 'Unable to save the category.');
+      }
     });
   }
 

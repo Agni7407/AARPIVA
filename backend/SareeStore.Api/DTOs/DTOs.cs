@@ -15,8 +15,9 @@ public record ResendPasswordResetOtpRequest([Required, EmailAddress] string Emai
 public record ResetPasswordRequest([Required, EmailAddress] string Email, [Required, RegularExpression("^[0-9]{6}$")] string Otp, [Required, MinLength(8)] string NewPassword);
 public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(8)] string NewPassword);
 
-public record CategoryRequest([Required, MinLength(2)] string Name, bool IsActive = true);
-public record CategoryResponse(int Id, string Name, string Slug, bool IsActive);
+public record CategoryRequest([Required, MinLength(2)] string Name, bool IsActive = true, string ImageMode = "auto", [StringLength(2048)] string? ImageUrl = null);
+public record CategoryResponse(int Id, string Name, string Slug, bool IsActive, string? ImageUrl);
+public record AdminCategoryResponse(int Id, string Name, string Slug, bool IsActive, string ImageMode, string? ImageUrl, string? ResolvedImageUrl);
 
 public record ProductRequest([Required, MinLength(2)] string Name, [Required] int CategoryId, string Description, [Range(0, double.MaxValue)] decimal Price, [Range(0, double.MaxValue)] decimal? DiscountPrice, [Range(0, int.MaxValue)] int Stock, bool IsActive = true, List<string>? ImageUrls = null);
 public record ProductResponse(int Id, int CategoryId, string CategoryName, string Name, string Slug, string Description, decimal Price, decimal? DiscountPrice, int Stock, bool IsActive, List<string> Images);
