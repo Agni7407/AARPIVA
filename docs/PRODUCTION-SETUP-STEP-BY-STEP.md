@@ -91,7 +91,7 @@ frontend/saree-store
 Build command:
 
 ```text
-npm ci && npm run build
+npm run build
 ```
 
 Build output directory:
@@ -100,7 +100,9 @@ Build output directory:
 dist/saree-store/browser
 ```
 
-The repository already contains `public/_redirects` so Angular deep links such as `/login`, `/products/12` and `/orders` resolve to `index.html`.
+Angular copies `public/robots.txt` into the root of the `dist/saree-store/browser/` output. The Cloudflare Pages Function at `functions/sitemap.xml.js` serves the dynamic sitemap at `/sitemap.xml` using the public active-catalog APIs. Keep `functions/` at the Pages project root; it is source for Cloudflare Pages, not part of Angular's generated output.
+
+There is no custom `404.html` or catch-all redirect. Cloudflare Pages therefore uses its built-in single-page application behavior and serves the root `index.html` for unmatched paths, preserving direct navigation and refreshes for Angular routes such as `/login`, `/products/12` and `/orders`. Existing static files, including `robots.txt`, are served from the output directory.
 
 Add the production domain as the Pages custom domain.
 

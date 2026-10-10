@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .angular/
+# Generated output left by the previous Pages output configuration.
+browser/
 .env
 .env.*
 !.env.example
