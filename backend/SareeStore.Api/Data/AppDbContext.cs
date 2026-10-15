@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+    public DbSet<ProductSizeVariant> ProductSizeVariants => Set<ProductSizeVariant>();
     public DbSet<Address> Addresses => Set<Address>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
@@ -27,7 +28,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Product>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<EmailVerificationToken>().HasIndex(x => x.TokenHash).IsUnique();
         b.Entity<EmailVerificationOtp>().HasIndex(x => new { x.UserId, x.Used, x.ExpiresAt });
-        b.Entity<CartItem>().HasIndex(x => new { x.UserId, x.ProductId }).IsUnique();
+        b.Entity<CartItem>().HasIndex(x => new { x.UserId, x.ProductId, x.SizeCode }).IsUnique();
+        b.Entity<ProductSizeVariant>().HasIndex(x => new { x.ProductId, x.SizeCode }).IsUnique();
+        b.Entity<ProductSizeVariant>().ToTable(t => t.HasCheckConstraint("CK_ProductSizeVariants_Stock", "\"Stock\" >= 0"));
+        b.Entity<ProductSizeVariant>().HasOne(x => x.Product).WithMany(x => x.SizeVariants).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<CartItem>().HasOne(x => x.User).WithMany(x => x.CartItems).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<CartItem>().HasOne(x => x.Product).WithMany(x => x.CartItems).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<EmailVerificationOtp>().HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);

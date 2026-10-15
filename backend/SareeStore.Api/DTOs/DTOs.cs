@@ -15,24 +15,28 @@ public record ResendPasswordResetOtpRequest([Required, EmailAddress] string Emai
 public record ResetPasswordRequest([Required, EmailAddress] string Email, [Required, RegularExpression("^[0-9]{6}$")] string Otp, [Required, MinLength(8)] string NewPassword);
 public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(8)] string NewPassword);
 
-public record CategoryRequest([Required, MinLength(2)] string Name, bool IsActive = true, string ImageMode = "auto", [StringLength(2048)] string? ImageUrl = null);
-public record CategoryResponse(int Id, string Name, string Slug, bool IsActive, string? ImageUrl);
-public record AdminCategoryResponse(int Id, string Name, string Slug, bool IsActive, string ImageMode, string? ImageUrl, string? ResolvedImageUrl);
+public record CategoryRequest([Required, MinLength(2)] string Name, bool IsActive = true, string ImageMode = "auto", [StringLength(2048)] string? ImageUrl = null, bool RequiresSize = false, List<string>? SizeOptions = null, SizeGuideDto? SizeGuide = null);
+public record SizeGuideDto(string Unit, List<string> Columns, Dictionary<string, List<decimal?>> Rows);
+public record CategoryResponse(int Id, string Name, string Slug, bool IsActive, string? ImageUrl, bool RequiresSize = false, List<string>? SizeOptions = null, SizeGuideDto? SizeGuide = null);
+public record AdminCategoryResponse(int Id, string Name, string Slug, bool IsActive, string ImageMode, string? ImageUrl, string? ResolvedImageUrl, bool RequiresSize = false, List<string>? SizeOptions = null, SizeGuideDto? SizeGuide = null);
 
-public record ProductRequest([Required, MinLength(2)] string Name, [Required] int CategoryId, string Description, [Range(0, double.MaxValue)] decimal Price, [Range(0, double.MaxValue)] decimal? DiscountPrice, [Range(0, int.MaxValue)] int Stock, bool IsActive = true, List<string>? ImageUrls = null);
-public record ProductResponse(int Id, int CategoryId, string CategoryName, string Name, string Slug, string Description, decimal Price, decimal? DiscountPrice, int Stock, bool IsActive, List<string> Images);
+public record ProductVariantRequest(string SizeCode, int Stock, bool IsEnabled = true);
+public record ProductRequest([Required, MinLength(2)] string Name, [Required] int CategoryId, string Description, [Range(0, double.MaxValue)] decimal Price, [Range(0, double.MaxValue)] decimal? DiscountPrice, [Range(0, int.MaxValue)] int Stock, bool IsActive = true, List<string>? ImageUrls = null, List<ProductVariantRequest>? SizeVariants = null);
+public record ProductVariantResponse(string SizeCode, int Stock, bool IsEnabled, bool IsAvailable);
+public record ProductResponse(int Id, int CategoryId, string CategoryName, string Name, string Slug, string Description, decimal Price, decimal? DiscountPrice, int Stock, bool IsActive, List<string> Images, bool RequiresSize = false, List<string>? SizeOptions = null, List<ProductVariantResponse>? SizeVariants = null, string SizeGuideJson = "{}");
 
 public record AddressRequest([Required] string RecipientName, [Required] string Phone, [Required] string AddressLine1, string AddressLine2, [Required] string City, [Required] string State, [Required] string Pincode);
 public record AddressResponse(int Id, string RecipientName, string Phone, string AddressLine1, string AddressLine2, string City, string State, string Pincode);
 
 public record CreateOrderRequest([Required] int AddressId);
-public record CartItemResponse(int ProductId, int Quantity, ProductResponse Product);
-public record UpdateCartItemRequest([Range(1, 50)] int Quantity);
-public record CartLineRequest([Required] int ProductId, [Range(1, 50)] int Quantity);
+public record CartItemResponse(int ProductId, int Quantity, ProductResponse Product, string? SizeCode = null);
+public record UpdateCartItemRequest([Range(1, 50)] int Quantity, string? SizeCode = null);
+public record CartLineRequest([Required] int ProductId, [Range(1, 50)] int Quantity, string? SizeCode = null);
 public record CreateRazorpayOrderRequest([Required] int OrderId);
 public record CancelPaymentRequest([Required] int OrderId);
 public record VerifyPaymentRequest([Required] int OrderId, [Required] string RazorpayOrderId, [Required] string RazorpayPaymentId, [Required] string RazorpaySignature);
 public record UpdateOrderStatusRequest(OrderStatus Status);
+public record ResolvePaidNeedsRefundRequest([Required, StringLength(128, MinimumLength = 3)] string RefundReference, [StringLength(1000)] string? Note = null);
 public record UpdateDeliverySettingsRequest([Range(0, double.MaxValue)] decimal DeliveryCharge, [Range(0, double.MaxValue)] decimal FreeDeliveryThreshold);
 public record DeliverySettingsResponse(decimal DeliveryCharge, decimal FreeDeliveryThreshold);
 public record CheckoutSummaryResponse(decimal Subtotal, decimal DiscountAmount, decimal DeliveryCharge, decimal TotalAmount);
@@ -41,4 +45,4 @@ public record UpdateReturnStatusRequest(ReturnStatus Status, string? AdminNote);
 public record ReturnRequestResponse(int Id, int OrderId, int OrderItemId, int ProductId, string ProductName, int Quantity, string Reason, ReturnStatus Status, string AdminNote, DateTime CreatedAt, DateTime UpdatedAt);
 
 public record OrderListResponse(int Id, decimal Subtotal, decimal DiscountAmount, decimal DeliveryCharge, decimal TotalAmount, OrderStatus Status, PaymentStatus PaymentStatus, DateTime CreatedAt, List<OrderItemResponse> Items, AddressResponse Address, List<ReturnRequestResponse> Returns);
-public record OrderItemResponse(int Id, int ProductId, string ProductName, decimal UnitPrice, int Quantity);
+public record OrderItemResponse(int Id, int ProductId, string ProductName, decimal UnitPrice, int Quantity, string? SizeCode = null);

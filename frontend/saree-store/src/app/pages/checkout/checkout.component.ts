@@ -244,9 +244,10 @@ export class CheckoutComponent{
                   razorpayPaymentId:response.razorpay_payment_id,
                   razorpaySignature:response.razorpay_signature
                 }).subscribe({
-                  next:()=>{
+                  next:(result:any)=>{
                     this.placing=false;
                     this.cart.refresh();
+                    if(result?.needsRefund) alert('Your payment was captured, but stock could not be reserved in time. The order is listed for refund follow-up.');
                     this.router.navigateByUrl('/orders');
                   },
                   error:e=>{

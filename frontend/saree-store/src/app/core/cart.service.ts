@@ -38,7 +38,7 @@ export class CartService {
 
         const guestLines = this.loadGuestCart().map(item => ({
           productId: item.productId,
-          quantity: item.quantity
+          quantity: item.quantity, sizeCode: item.sizeCode || null
         }));
 
         const cart$ = guestLines.length
@@ -85,22 +85,24 @@ export class CartService {
     return product.discountPrice ?? product.price;
   }
 
-  add(product: Product, quantity = 1): void {
-    if (quantity < 1 || product.stock <= 0) return;
+  add(product: Product, quantity = 1, sizeCode: string | null = null): void {
+    if (quantity < 1 || (product.requiresSize ? !(product.sizeVariants||[]).some(v=>v.sizeCode===sizeCode&&v.isAvailable) : product.stock <= 0)) return;
     this.errorSubject.next('');
 
     if (!this.auth.isLogged()) {
       const items = this.loadGuestCart();
       const next = items.map(item => ({ ...item }));
-      const existing = next.find(item => item.productId === product.id);
+      const existing = next.find(item => item.productId === product.id && (item.sizeCode||null) === sizeCode);
+      const stock = product.requiresSize ? product.sizeVariants?.find(v=>v.sizeCode===sizeCode)?.stock||0 : product.stock;
 
       if (existing) {
-        existing.quantity = Math.min(existing.quantity + quantity, product.stock);
+        existing.quantity = Math.min(existing.quantity + quantity, stock);
         existing.product = product;
       } else {
         next.push({
           productId: product.id,
-          quantity: Math.min(quantity, product.stock),
+          sizeCode,
+          quantity: Math.min(quantity, stock),
           product
         });
       }
@@ -109,44 +111,44 @@ export class CartService {
       return;
     }
 
-    this.api.addCartItem(product.id, quantity).subscribe({
+    this.api.addCartItem(product.id, quantity, sizeCode).subscribe({
       next: item => this.upsert(item),
       error: error => this.setError(error, 'Unable to add this item to your bag.')
     });
   }
 
-  setQuantity(productId: number, quantity: number): void {
+  setQuantity(productId: number, quantity: number, sizeCode: string|null = null): void {
     if (quantity < 1) {
-      this.remove(productId);
+      this.remove(productId, sizeCode);
       return;
     }
 
     this.errorSubject.next('');
 
     if (!this.auth.isLogged()) {
-      const next = this.items.map(item => item.productId === productId
-        ? { ...item, quantity: Math.max(1, Math.min(quantity, item.product.stock)) }
+      const next = this.items.map(item => item.productId === productId && (item.sizeCode||null)===sizeCode
+        ? { ...item, quantity: Math.max(1, Math.min(quantity, item.product.requiresSize ? item.product.sizeVariants?.find(v=>v.sizeCode===sizeCode)?.stock||0 : item.product.stock)) }
         : item);
       this.commitGuestCart(next);
       return;
     }
 
-    this.api.updateCartItem(productId, quantity).subscribe({
+    this.api.updateCartItem(productId, quantity, sizeCode).subscribe({
       next: item => this.upsert(item),
       error: error => this.setError(error, 'Unable to update the quantity.')
     });
   }
 
-  remove(productId: number): void {
+  remove(productId: number, sizeCode: string|null = null): void {
     this.errorSubject.next('');
 
     if (!this.auth.isLogged()) {
-      this.commitGuestCart(this.items.filter(item => item.productId !== productId));
+      this.commitGuestCart(this.items.filter(item => !(item.productId === productId && (item.sizeCode||null)===sizeCode)));
       return;
     }
 
-    this.api.removeCartItem(productId).subscribe({
-      next: () => this.subject.next(this.items.filter(item => item.productId !== productId)),
+    this.api.removeCartItem(productId, sizeCode).subscribe({
+      next: () => this.subject.next(this.items.filter(item => !(item.productId === productId && (item.sizeCode||null)===sizeCode))),
       error: error => this.setError(error, 'Unable to remove this item.')
     });
   }
@@ -188,7 +190,7 @@ export class CartService {
   }
 
   private upsert(item: CartItem): void {
-    const items = this.items.filter(existing => existing.productId !== item.productId);
+    const items = this.items.filter(existing => !(existing.productId === item.productId && (existing.sizeCode||null)===(item.sizeCode||null)));
     items.push(item);
     this.subject.next(items.sort((a, b) => a.productId - b.productId));
   }
@@ -204,6 +206,7 @@ export class CartService {
           if (item?.product) {
             return {
               productId: +item.productId,
+              sizeCode: item.sizeCode || null,
               quantity: Math.max(1, +item.quantity || 1),
               product: item.product as Product
             } as CartItem;

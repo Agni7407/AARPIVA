@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule, CurrencyPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { CartService } from '../../core/cart.service';
@@ -7,7 +8,7 @@ import { Product } from '../../core/models';
 
 @Component({
   standalone: true,
-  imports: [CommonModule, CurrencyPipe, RouterLink],
+  imports: [CommonModule, FormsModule, CurrencyPipe, RouterLink],
   template: `
     <ng-container *ngIf="loading">
       <section class="state"><div class="loader"></div><p>Loading product…</p></section>
@@ -42,20 +43,30 @@ import { Product } from '../../core/models';
           </div>
 
           <div class="copy"><p>{{p.description}}</p></div>
-          <div class="availability"><span class="dot"></span>{{p.stock>0 ? 'In stock · '+p.stock+' pieces available' : 'Currently out of stock'}}</div>
+          <div class="availability"><span class="dot"></span>{{p.requiresSize ? 'Choose a size to check availability' : p.stock>0 ? 'In stock · '+p.stock+' pieces available' : 'Currently out of stock'}}</div>
+
+          <div class="size-select" *ngIf="p.requiresSize">
+            <label for="sizeChoice">Size</label>
+            <select id="sizeChoice" [(ngModel)]="selectedSize" (ngModelChange)="qty=Math.min(qty,selectedStock(p)||1)"><option value="">Choose a size</option><option *ngFor="let size of p.sizeOptions" [value]="size" [disabled]="!variant(size)?.isAvailable">{{size}} {{variant(size)?.isAvailable ? '('+variant(size)?.stock+' available)' : '(sold out)'}}</option></select>
+            <button class="guide-link" type="button" (click)="showSizeGuide=!showSizeGuide">Size guide</button>
+          </div>
+          <div class="guide" *ngIf="showSizeGuide && p.requiresSize && guide(p) as g">
+            <div class="guide-head"><b>Size guide</b><select [(ngModel)]="displayUnit"><option value="in">Inches</option><option value="cm">Centimetres</option></select></div>
+            <div class="guide-scroll"><table><thead><tr><th>Size</th><th *ngFor="let col of g.columns">{{col}}</th></tr></thead><tbody><tr *ngFor="let size of p.sizeOptions"><th>{{size}}</th><td *ngFor="let value of g.rows[size]">{{convert(value,g.unit,displayUnit)}}</td></tr></tbody></table></div>
+          </div>
 
           <div class="selector">
             <label>Quantity</label>
             <div class="qty">
               <button type="button" (click)="qty=Math.max(1,qty-1)">−</button>
               <span>{{qty}}</span>
-              <button type="button" [disabled]="qty>=p.stock" (click)="qty=Math.min(p.stock,qty+1)">+</button>
+              <button type="button" [disabled]="qty>=selectedStock(p)" (click)="qty=Math.min(selectedStock(p),qty+1)">+</button>
             </div>
           </div>
 
           <div *ngIf="message" class="cart-message">{{message}}</div>
-          <button class="buy" [disabled]="p.stock<1" type="button" (click)="add(p)">
-            {{p.stock>0 ? 'ADD TO BAG' : 'OUT OF STOCK'}} <span>→</span>
+          <button class="buy" [disabled]="p.requiresSize ? !variant(selectedSize)?.isAvailable : p.stock<1" type="button" (click)="add(p)">
+            {{selectedStock(p)>0 ? 'ADD TO BAG' : 'OUT OF STOCK'}} <span>→</span>
           </button>
 
           <div class="accordions">
@@ -87,6 +98,9 @@ export class ProductDetailComponent {
   product?: Product;
   qty = 1;
   selectedImage = 0;
+  selectedSize = '';
+  showSizeGuide = false;
+  displayUnit = 'in';
   loading = true;
   errorMessage = 'The product may have been removed or the API may be unavailable.';
   message = '';
@@ -140,9 +154,20 @@ export class ProductDetailComponent {
   }
 
   add(p: Product): void {
-    this.cart.add(p, this.qty);
+    if (p.requiresSize && !this.variant(this.selectedSize)?.isAvailable) return;
+    this.cart.add(p, this.qty, p.requiresSize ? this.selectedSize : null);
     this.message = `${this.qty} ${this.qty === 1 ? 'item' : 'items'} added to your bag.`;
     setTimeout(() => this.message = '', 2200);
+  }
+
+  variant(size: string) { return this.product?.sizeVariants?.find(v => v.sizeCode === size); }
+  selectedStock(p: Product) { return p.requiresSize ? (this.variant(this.selectedSize)?.stock || 0) : p.stock; }
+  guide(p: Product): any { try { return JSON.parse(p.sizeGuideJson || '{}'); } catch { return null; } }
+  convert(value: number | null, from: string, to: string): string {
+    if (value == null) return '—';
+    if (from === to) return String(value);
+    const result = from === 'in' ? value * 2.54 : value / 2.54;
+    return result.toFixed(2).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
   imageError(event: Event): void {

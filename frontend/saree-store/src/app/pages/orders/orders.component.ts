@@ -68,6 +68,7 @@ import { Order } from '../../core/models';
                   </div>
                   <div class="item-copy">
                     <strong>{{item.productName}}</strong>
+                    <small *ngIf="item.sizeCode">Size {{item.sizeCode}}</small>
                     <small>Qty {{item.quantity}} · {{item.unitPrice | currency:'INR':'symbol':'1.0-0'}} each</small>
 
                     <ng-container *ngIf="returnForItem(o,item.id) as rr">

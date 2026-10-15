@@ -2,7 +2,7 @@ namespace SareeStore.Api.Models;
 
 public enum UserRole { Customer, Admin }
 public enum OrderStatus { Pending, Confirmed, Packed, Shipped, Delivered, Cancelled }
-public enum PaymentStatus { Pending, Paid, Failed, Refunded }
+public enum PaymentStatus { Pending, Paid, Failed, Refunded, PaidNeedsRefund }
 public enum ReturnStatus { Requested, Approved, Rejected, Received, Refunded, Cancelled }
 
 public class AppUser
@@ -63,6 +63,9 @@ public class Category
     public bool IsActive { get; set; } = true;
     public string ImageMode { get; set; } = "auto";
     public string? ImageUrl { get; set; }
+    public bool RequiresSize { get; set; }
+    public string SizeOptionsJson { get; set; } = "[]";
+    public string SizeGuideJson { get; set; } = "{}";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<Product> Products { get; set; } = [];
 }
@@ -83,6 +86,17 @@ public class Product
     public List<ProductImage> Images { get; set; } = [];
     public List<OrderItem> OrderItems { get; set; } = [];
     public List<CartItem> CartItems { get; set; } = [];
+    public List<ProductSizeVariant> SizeVariants { get; set; } = [];
+}
+
+public class ProductSizeVariant
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public string SizeCode { get; set; } = "";
+    public int Stock { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public Product Product { get; set; } = null!;
 }
 
 public class ProductImage
@@ -99,6 +113,7 @@ public class CartItem
     public int Id { get; set; }
     public int UserId { get; set; }
     public int ProductId { get; set; }
+    public string SizeCode { get; set; } = "";
     public int Quantity { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -141,6 +156,11 @@ public class Order
     public decimal TotalAmount { get; set; }
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
+    public bool StockReserved { get; set; }
+    public DateTime? ReservationExpiresAt { get; set; }
+    public string? RefundReference { get; set; }
+    public string? RefundNote { get; set; }
+    public DateTime? RefundResolvedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public AppUser User { get; set; } = null!;
     public Address Address { get; set; } = null!;
@@ -156,6 +176,8 @@ public class OrderItem
     public string ProductName { get; set; } = "";
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
+    public string SizeCode { get; set; } = "";
+    public bool RequiresSize { get; set; }
     public Order Order { get; set; } = null!;
     public Product Product { get; set; } = null!;
 }

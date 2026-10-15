@@ -122,7 +122,7 @@ public class NotificationService(IEmailSender email, ILogger<NotificationService
 
     public Task SendPaymentSuccessAsync(Order order)
     {
-        var lines = string.Join("", order.Items.Select(i => $"<tr><td style='padding:8px 0'>{Esc(i.ProductName)}</td><td style='padding:8px 0'>x{i.Quantity}</td><td style='padding:8px 0;text-align:right'>{Money(i.UnitPrice * i.Quantity)}</td></tr>"));
+        var lines = string.Join("", order.Items.Select(i => $"<tr><td style='padding:8px 0'>{Esc(i.ProductName)}{(string.IsNullOrEmpty(i.SizeCode) ? "" : $" · Size {Esc(i.SizeCode)}")}</td><td style='padding:8px 0'>x{i.Quantity}</td><td style='padding:8px 0;text-align:right'>{Money(i.UnitPrice * i.Quantity)}</td></tr>"));
         var html = $"""
         <div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#171515'>
           <h2>AARPIVA payment successful</h2>

@@ -19,6 +19,7 @@ public sealed record R2UploadFinalizeResult(
 
 public interface IR2StorageService
 {
+    bool TryGetOwnedObjectKey(string publicUrl, out string objectKey);
     R2UploadTicket CreateUploadTicket(string contentType);
     Task<R2UploadFinalizeResult> FinalizeUploadAsync(string objectKey, string expectedContentType, long expectedSizeBytes, CancellationToken cancellationToken = default);
     Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default);
@@ -58,6 +59,15 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
         return new R2UploadTicket(uploadUrl, objectKey, publicUrl, 900);
     }
 
+    public bool TryGetOwnedObjectKey(string publicUrl, out string objectKey)
+    {
+        objectKey = string.Empty;
+        var publicBaseUrl = configuration["CloudflareR2:PublicBaseUrl"];
+        var bucket = configuration["CloudflareR2:Bucket"];
+        if (string.IsNullOrWhiteSpace(publicBaseUrl) || string.IsNullOrWhiteSpace(bucket)) return false;
+        return R2ObjectKeyMapper.TryGetOwnedObjectKey(publicUrl, publicBaseUrl, bucket, out objectKey);
+    }
+
     public async Task<R2UploadFinalizeResult> FinalizeUploadAsync(
         string objectKey,
         string expectedContentType,
@@ -65,9 +75,10 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
         CancellationToken cancellationToken = default)
     {
         ValidateContentType(expectedContentType);
+        var safeObjectKey = objectKey ?? string.Empty;
         if (expectedSizeBytes is < 1 or > MaxImageBytes)
             throw new InvalidOperationException("Image must be larger than 0 bytes and no larger than 10 MB.");
-        if (!objectKey.StartsWith("products/", StringComparison.Ordinal))
+        if (!R2ObjectKeyMapper.IsOwnedKey(safeObjectKey))
             throw new InvalidOperationException("Invalid product image key.");
 
         var (s3, bucket, publicBaseUrl) = GetConfiguredClient();
@@ -77,7 +88,7 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
             var metadata = await s3.GetObjectMetadataAsync(new GetObjectMetadataRequest
             {
                 BucketName = bucket,
-                Key = objectKey
+                Key = safeObjectKey
             }, cancellationToken);
 
             var actualType = metadata.Headers.ContentType?.Trim() ?? string.Empty;
@@ -90,8 +101,8 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
                 throw new InvalidOperationException("The uploaded image size did not match the requested upload.");
 
             return new R2UploadFinalizeResult(
-                objectKey,
-                BuildPublicUrl(publicBaseUrl, bucket, objectKey),
+                safeObjectKey,
+                BuildPublicUrl(publicBaseUrl, bucket, safeObjectKey),
                 actualType,
                 actualSize);
         }
@@ -99,11 +110,11 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
         {
             try
             {
-                await s3.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = objectKey }, cancellationToken);
+                await s3.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = safeObjectKey }, cancellationToken);
             }
             catch (Exception cleanupEx)
             {
-                logger.LogWarning(cleanupEx, "Unable to remove invalid R2 upload {ObjectKey}", objectKey);
+                logger.LogWarning(cleanupEx, "Unable to remove invalid R2 upload {ObjectKey}", safeObjectKey);
             }
             throw;
         }
@@ -111,8 +122,7 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
 
     public async Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(objectKey) || !objectKey.StartsWith("products/", StringComparison.Ordinal))
-            return;
+        if (!R2ObjectKeyMapper.IsOwnedKey(objectKey)) throw new InvalidOperationException("Invalid R2 object key.");
 
         var (s3, bucket, _) = GetConfiguredClient();
         await s3.DeleteObjectAsync(new DeleteObjectRequest
@@ -166,13 +176,7 @@ public sealed class R2StorageService(IConfiguration configuration, ILogger<R2Sto
         string bucket,
         string objectKey)
     {
-        var encodedKey = string.Join(
-            "/",
-            objectKey
-                .Split('/', StringSplitOptions.RemoveEmptyEntries)
-                .Select(Uri.EscapeDataString));
-
-        return $"{publicBaseUrl.TrimEnd('/')}/{Uri.EscapeDataString(bucket)}/{encodedKey}";
+        return R2ObjectKeyMapper.BuildPublicUrl(publicBaseUrl, bucket, objectKey);
     }
 
     public void Dispose()

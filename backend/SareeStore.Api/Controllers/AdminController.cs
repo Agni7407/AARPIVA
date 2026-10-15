@@ -11,7 +11,7 @@ namespace SareeStore.Api.Controllers;
 public class AdminController(AppDbContext db, INotificationService notifications) : ControllerBase
 {
     [HttpGet("dashboard")]
-    public async Task<ActionResult> Dashboard()=>Ok(new {customers=await db.Users.CountAsync(x=>x.Role==UserRole.Customer),products=await db.Products.CountAsync(x=>x.IsActive),categories=await db.Categories.CountAsync(x=>x.IsActive),orders=await db.Orders.CountAsync(x=>x.PaymentStatus==PaymentStatus.Paid || x.PaymentStatus==PaymentStatus.Refunded),paidRevenue=await db.Orders.Where(x=>x.PaymentStatus==PaymentStatus.Paid).SumAsync(x=>(decimal?)x.TotalAmount)??0});
+    public async Task<ActionResult> Dashboard()=>Ok(new {customers=await db.Users.CountAsync(x=>x.Role==UserRole.Customer),products=await db.Products.CountAsync(x=>x.IsActive),categories=await db.Categories.CountAsync(x=>x.IsActive),orders=await db.Orders.CountAsync(x=>x.PaymentStatus==PaymentStatus.Paid || x.PaymentStatus==PaymentStatus.Refunded || x.PaymentStatus==PaymentStatus.PaidNeedsRefund),paidRevenue=await db.Orders.Where(x=>x.PaymentStatus==PaymentStatus.Paid).SumAsync(x=>(decimal?)x.TotalAmount)??0,pendingRefunds=await db.Orders.CountAsync(x=>x.PaymentStatus==PaymentStatus.PaidNeedsRefund)});
     [HttpGet("orders")]
     public async Task<ActionResult> Orders() => Ok(await db.Orders
         .Include(x => x.User)
@@ -29,6 +29,9 @@ public class AdminController(AppDbContext db, INotificationService notifications
             x.TotalAmount,
             x.Status,
             x.PaymentStatus,
+            x.RefundReference,
+            x.RefundNote,
+            x.RefundResolvedAt,
             x.CreatedAt,
             address = new
             {
@@ -44,12 +47,35 @@ public class AdminController(AppDbContext db, INotificationService notifications
             {
                 i.ProductId,
                 i.ProductName,
+                i.SizeCode,
                 i.Quantity,
                 i.UnitPrice,
                 lineTotal = i.UnitPrice * i.Quantity
             })
         })
         .ToListAsync());
+
+    [HttpPut("orders/{id:int}/refund-resolution")]
+    public async Task<ActionResult> ResolvePaidNeedsRefund(int id, ResolvePaidNeedsRefundRequest req)
+    {
+        var order = await db.Orders.Include(x => x.Payment).FirstOrDefaultAsync(x => x.Id == id);
+        if (order is null) return NotFound();
+        if (order.PaymentStatus == PaymentStatus.Refunded && order.RefundResolvedAt is not null)
+            return Ok(new { order.Id, order.PaymentStatus, order.RefundReference, order.RefundResolvedAt });
+        if (order.PaymentStatus != PaymentStatus.PaidNeedsRefund)
+            return Conflict("Only orders awaiting refund follow-up can be resolved here.");
+
+        var reference = req.RefundReference.Trim();
+        if (reference.Length < 3) return BadRequest("Enter the payment provider's completed refund reference.");
+        var now = DateTime.UtcNow;
+        order.RefundReference = reference;
+        order.RefundNote = string.IsNullOrWhiteSpace(req.Note) ? null : req.Note.Trim();
+        order.RefundResolvedAt = now;
+        order.PaymentStatus = PaymentStatus.Refunded;
+        if (order.Payment is not null) order.Payment.Status = PaymentStatus.Refunded;
+        await db.SaveChangesAsync();
+        return Ok(new { order.Id, order.PaymentStatus, order.RefundReference, order.RefundResolvedAt });
+    }
     [HttpPut("orders/{id:int}/status")]
     public async Task<ActionResult> Status(int id, UpdateOrderStatusRequest req)
     {
@@ -80,6 +106,7 @@ public class AdminController(AppDbContext db, INotificationService notifications
             customer = x.User.Name,
             email = x.User.Email,
             productName = x.OrderItem.ProductName,
+            sizeCode = x.OrderItem.SizeCode,
             productId = x.OrderItem.ProductId,
             x.Quantity,
             x.Reason,

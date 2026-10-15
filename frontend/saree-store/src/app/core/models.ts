@@ -6,6 +6,9 @@ export interface Category {
   imageMode?: 'auto' | 'custom';
   imageUrl: string | null;
   resolvedImageUrl?: string | null;
+  requiresSize?: boolean;
+  sizeOptions?: string[];
+  sizeGuide?: { unit: string; columns: string[]; rows: Record<string, Array<number|null>> } | null;
 }
 
 export interface Product {
@@ -20,11 +23,16 @@ export interface Product {
   stock: number;
   isActive: boolean;
   images: string[];
+  requiresSize?: boolean;
+  sizeOptions?: string[];
+  sizeVariants?: { sizeCode: string; stock: number; isEnabled: boolean; isAvailable: boolean }[];
+  sizeGuideJson?: string;
 }
 
 export interface CartItem {
   productId: number;
   quantity: number;
+  sizeCode?: string | null;
   product: Product;
 }
 
@@ -62,7 +70,7 @@ export interface Order {
   status: string;
   paymentStatus: string;
   createdAt: string;
-  items: { productId: number; productName: string; unitPrice: number; quantity: number; id?: number }[];
+  items: { productId: number; productName: string; unitPrice: number; quantity: number; id?: number; sizeCode?: string|null }[];
   address: Address;
   returns: ReturnRequest[];
 }

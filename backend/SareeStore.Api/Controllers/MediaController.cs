@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SareeStore.Api.Data;
 using SareeStore.Api.Services;
 
 namespace SareeStore.Api.Controllers;
@@ -8,7 +10,7 @@ namespace SareeStore.Api.Controllers;
 [ApiController]
 [Authorize(Policy = "Admin")]
 [Route("api/admin/media")]
-public sealed class MediaController(IR2StorageService storage, ILogger<MediaController> logger) : ControllerBase
+public sealed class MediaController(IR2StorageService storage, AppDbContext db, ILogger<MediaController> logger) : ControllerBase
 {
     private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,10 +28,11 @@ public sealed class MediaController(IR2StorageService storage, ILogger<MediaCont
             if (request.SizeBytes is < 1 or > 10 * 1024 * 1024)
                 return BadRequest(new { message = "Image must be between 1 byte and 10 MB." });
 
-            if (!AllowedTypes.Contains(request.ContentType?.Trim() ?? string.Empty))
+            var contentType = request.ContentType?.Trim() ?? string.Empty;
+            if (!AllowedTypes.Contains(contentType))
                 return BadRequest(new { message = "Only JPEG, PNG, WEBP and AVIF images are supported." });
 
-            return Ok(storage.CreateUploadTicket(request.ContentType.Trim()));
+            return Ok(storage.CreateUploadTicket(contentType));
         }
         catch (Exception ex)
         {
@@ -64,8 +67,10 @@ public sealed class MediaController(IR2StorageService storage, ILogger<MediaCont
     [HttpDelete]
     public async Task<IActionResult> Delete(DeleteUploadRequest request, CancellationToken cancellationToken)
     {
+        await using var imageLock = await ImageReferenceCoordinator.AcquireAsync(db, cancellationToken);
         try
         {
+            if (!await MayDeleteAsync(request.ObjectKey, cancellationToken)) return Conflict(new { message = "This image is still referenced." });
             await storage.DeleteObjectAsync(request.ObjectKey, cancellationToken);
             return NoContent();
         }
@@ -74,6 +79,12 @@ public sealed class MediaController(IR2StorageService storage, ILogger<MediaCont
             logger.LogError(ex, "Unable to delete R2 object {ObjectKey}.", request.ObjectKey);
             return Problem(title: "Could not delete image.", statusCode: StatusCodes.Status500InternalServerError);
         }
+    }
+
+    private async Task<bool> MayDeleteAsync(string key, CancellationToken ct)
+    {
+        var knownUrls = await db.ProductImages.Select(x => x.ImageUrl).Concat(db.Categories.Select(x => x.ImageUrl ?? "")).ToListAsync(ct);
+        return !ImageReferencePolicy.IsReferenced(key, knownUrls, url => storage.TryGetOwnedObjectKey(url, out var referenced) && referenced == key);
     }
 
     public sealed class CreateUploadUrlRequest

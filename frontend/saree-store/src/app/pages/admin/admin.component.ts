@@ -29,6 +29,11 @@ import { Router } from '@angular/router';
       </div>
 
       <div *ngIf="tab==='dashboard'" class="dashboard-grid">
+        <div *ngIf="dash.pendingRefunds" class="refund-alert" role="alert">
+          <strong>Refund follow-up required: {{dash.pendingRefunds}} order(s)</strong>
+          <span>Payment was captured but stock was unavailable. Review each case and record the provider refund reference after issuing the refund.</span>
+          <button type="button" class="btn dark" (click)="selectTab('orders')">Review refund cases</button>
+        </div>
         <div class="stats">
           <div><small>Customers</small><b>{{dash.customers ?? 0}}</b><button type="button" class="stat-link" (click)="selectTab('customers')">View customers →</button></div>
           <div><small>Products</small><b>{{dash.products ?? 0}}</b><button type="button" class="stat-link" (click)="selectTab('products')">Manage products →</button></div>
@@ -85,6 +90,16 @@ import { Router } from '@angular/router';
             <input id="catName" [(ngModel)]="editingCat.name" name="catName" placeholder="e.g. Sarees" required>
           </div>
           <label class="check-line"><input type="checkbox" [(ngModel)]="editingCat.isActive" name="catActive"> Show this category in the store</label>
+          <div class="sizing-config">
+            <label class="check-line"><input type="checkbox" [(ngModel)]="editingCat.requiresSize" name="requiresSize"> Does this category require size selection?</label>
+            <div *ngIf="editingCat.requiresSize">
+              <p>Supported sizes</p><label *ngFor="let size of standardSizes"><input type="checkbox" [checked]="editingCat.sizeOptions.includes(size)" (change)="toggleCategorySize(size,$event)"> {{size}} </label>
+              <div class="form-grid two"><label>Measurement columns (comma separated)<input [(ngModel)]="editingCat.columnText" name="sizeColumns" placeholder="Chest, Length, Waist"></label><label>Saved unit<select [(ngModel)]="editingCat.guideUnit" name="guideUnit"><option value="in">Inches</option><option value="cm">Centimetres</option></select></label></div>
+              <div *ngFor="let size of editingCat.sizeOptions" class="guide-admin-row"><strong>{{size}}</strong><input *ngFor="let col of columns(editingCat)" type="number" min="0" step="0.01" [placeholder]="col" [(ngModel)]="editingCat.guideRows[size][col]" [name]="'guide_'+size+'_'+col"></div>
+              <div class="guide-preview" *ngIf="columns(editingCat).length"><strong>Customer preview</strong><div class="guide-scroll"><table><thead><tr><th>Size</th><th *ngFor="let col of columns(editingCat)">{{col}}</th></tr></thead><tbody><tr *ngFor="let size of editingCat.sizeOptions"><th>{{size}}</th><td *ngFor="let col of columns(editingCat)">{{editingCat.guideRows[size]?.[col] ?? '—'}}</td></tr></tbody></table></div></div>
+              <p class="hint">Add sizes and measurement labels, then enter the values your team has verified.</p>
+            </div>
+          </div>
           <div class="category-image-settings">
             <div class="section-title">Category image</div>
             <div class="category-image-options">
@@ -152,13 +167,19 @@ import { Router } from '@angular/router';
 
             <div class="field">
               <label for="pcat">Product category <span>*</span></label>
-              <select id="pcat" [(ngModel)]="editingProduct.categoryId" name="pcat" required [disabled]="loadingCategories || !categories.length">
+              <select id="pcat" [(ngModel)]="editingProduct.categoryId" name="pcat" (ngModelChange)="initializeVariants()" required [disabled]="loadingCategories || !categories.length">
                 <option [ngValue]="0">{{loadingCategories ? 'Loading categories…' : (categories.length ? 'Choose a category' : 'No categories available')}}</option>
                 <option *ngFor="let c of categories" [ngValue]="c.id">{{c.name}}</option>
               </select>
               <small *ngIf="categories.length">This decides where the product appears in the shop.</small>
               <small *ngIf="!loadingCategories && !categories.length">Go to <strong>Categories</strong> and create one first.</small>
             </div>
+          </div>
+
+          <div *ngIf="selectedCategory()?.requiresSize" class="variant-stock">
+            <div class="section-title">Per-size inventory</div>
+            <p>Only configured, enabled sizes with stock above zero can be purchased.</p>
+            <div class="variant-row" *ngFor="let size of selectedCategory()?.sizeOptions"><strong>{{size}}</strong><label>Stock<input type="number" min="0" step="1" [(ngModel)]="variantFor(size).stock" [name]="'stock_'+size"></label><label><input type="checkbox" [(ngModel)]="variantFor(size).isEnabled" [name]="'enabled_'+size"> Enabled</label></div>
           </div>
 
           <div class="section-title">Pricing & inventory</div>
@@ -368,6 +389,7 @@ import { Router } from '@angular/router';
               <span>
                 {{o.totalAmount|currency:'INR':'symbol':'1.0-0'}}
                 <small>{{o.paymentStatus}}</small>
+                <strong *ngIf="o.paymentStatus==='PaidNeedsRefund'" class="refund-badge">REFUND FOLLOW-UP</strong>
               </span>
 
               <select
@@ -384,11 +406,24 @@ import { Router } from '@angular/router';
               class="order-details-row">
 
               <div class="order-detail-grid">
+                <section *ngIf="o.paymentStatus==='PaidNeedsRefund' || o.refundResolvedAt" class="refund-case" [class.refund-done]="o.paymentStatus==='Refunded'">
+                  <strong>{{o.paymentStatus==='PaidNeedsRefund' ? 'Refund required — payment was captured, stock was unavailable.' : 'Refund recorded as completed.'}}</strong>
+                  <small *ngIf="o.refundReference">Provider reference: {{o.refundReference}} · {{o.refundResolvedAt | date:'medium'}}</small>
+                  <small *ngIf="o.refundNote">Note: {{o.refundNote}}</small>
+                  <div *ngIf="o.paymentStatus==='PaidNeedsRefund'" class="refund-resolution-form">
+                    <input [(ngModel)]="refundReferences[o.id]" [name]="'refundRef'+o.id" placeholder="Completed provider refund reference" maxlength="128">
+                    <input [(ngModel)]="refundNotes[o.id]" [name]="'refundNote'+o.id" placeholder="Optional note" maxlength="1000">
+                    <button type="button" class="btn dark" [disabled]="refundSaving[o.id] || !refundReferences[o.id]?.trim()" (click)="resolveRefund(o)">{{refundSaving[o.id] ? 'Saving…' : 'Record completed refund'}}</button>
+                    <small>Complete the refund in the payment provider first. This action only records its reference.</small>
+                    <small class="refund-error" *ngIf="refundErrors[o.id]">{{refundErrors[o.id]}}</small>
+                  </div>
+                </section>
                 <div>
                   <h3>Items ordered</h3>
                   <div class="ordered-item" *ngFor="let item of (o.items || [])">
                     <span>
                       <strong>{{item.productName}}</strong>
+                      <small *ngIf="item.sizeCode">Size {{item.sizeCode}}</small>
                       <small>Product #{{item.productId}} · Qty {{item.quantity}}</small>
                     </span>
                     <span>{{item.lineTotal|currency:'INR':'symbol':'1.0-0'}}</span>
@@ -584,7 +619,8 @@ import { Router } from '@angular/router';
   @media(max-width:1100px){.admin{padding:35px 4vw}.product-row{grid-template-columns:2fr 1fr 1fr 1fr}.product-row span:nth-child(2){display:none}}@media(max-width:980px){.form-grid.three{grid-template-columns:1fr}.image-source-tabs{grid-template-columns:1fr}.product-row{grid-template-columns:2fr 1fr 1fr}.product-row span:nth-child(4){display:none}.panel-head{flex-direction:column}.panel-head .btn{align-self:flex-start}}@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.dashboard-panel{padding:18px}.dashboard-panel-head{flex-direction:column}.recent-order{align-items:flex-start}.form-grid.two{grid-template-columns:1fr}.tr{grid-template-columns:1fr 1fr}.tr.head{display:none}.panel{padding:18px}.admin{padding:28px 4vw}.product-row,.order-row,.customer-row,.cat-row{grid-template-columns:1fr 1fr}.product-row span:nth-child(2),.product-row span:nth-child(4){display:block}.panel-head{align-items:stretch;flex-direction:column}.panel-head .btn{align-self:flex-start}.table{overflow-x:auto}.tr{min-width:620px}.product-form{padding:16px}.form-actions{flex-wrap:wrap}}@media(max-width:520px){.stats{grid-template-columns:1fr}.recent-order{flex-direction:column}.admin-top{align-items:flex-start;gap:12px;flex-direction:column}.admin h1{font-size:34px}.tabs{margin-bottom:20px}.panel{padding:14px}.tr{min-width:560px}.panel-head h2{font-size:24px}.source-option{padding:12px}}
     .delivery-settings-form{align-items:flex-start}.delivery-preview{display:grid;gap:5px;min-width:300px;max-width:520px;padding:13px 15px;background:#fff;border:1px solid #e5ded4;line-height:1.5}.delivery-preview strong{font-size:12px;text-transform:uppercase;letter-spacing:.08em}.delivery-preview span{font-size:13px;color:var(--muted)}.tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 4px;border-radius:99px;background:#111;color:#fff;font-size:9px}
     .return-admin-list{display:grid;gap:14px}.return-admin-card{border:1px solid var(--line);padding:18px;background:#fff}.return-admin-head{display:flex;justify-content:space-between;gap:15px;align-items:start;border-bottom:1px solid #eee;padding-bottom:14px;margin-bottom:14px}.return-admin-head small{display:block;color:var(--muted);margin-top:4px}.return-admin-head select{min-width:155px;padding:9px;border:1px solid var(--line);background:#fff}.return-admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.return-admin-grid>div{display:grid;gap:5px}.return-admin-grid .label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;color:#777}.return-admin-grid small{color:#777}.return-admin-grid p{margin:0;line-height:1.5;color:#555}.return-admin-grid textarea{width:100%;border:1px solid var(--line);padding:10px;resize:vertical;font:inherit;box-sizing:border-box}.note-save{justify-self:start;min-height:38px;padding:0 12px;font-size:11px}
-    @media(max-width:700px){.return-admin-head{flex-direction:column}.return-admin-head select{width:100%}.return-admin-grid{grid-template-columns:1fr}}
+    .refund-alert{display:grid;gap:10px;padding:18px;border:1px solid #b94b38;background:#fff1ed;color:#702719}.refund-alert .btn{justify-self:start}.refund-badge{display:inline-block;margin-top:6px;padding:4px 7px;background:#a83220;color:white;font-size:10px;letter-spacing:.04em}.refund-case{grid-column:1/-1;display:grid;gap:10px;padding:16px;border:1px solid #b94b38;background:#fff7f4}.refund-case.refund-done{border-color:#70a475;background:#f2faf2}.refund-resolution-form{display:grid;grid-template-columns:1fr 1fr auto;align-items:start;gap:8px}.refund-resolution-form input{min-width:0;padding:10px;border:1px solid var(--line)}.refund-resolution-form small{grid-column:1/-1;color:var(--muted)}.refund-resolution-form .refund-error{color:#a83220}
+    @media(max-width:700px){.return-admin-head{flex-direction:column}.return-admin-head select{width:100%}.return-admin-grid{grid-template-columns:1fr}.refund-resolution-form{grid-template-columns:1fr}}
     @media(max-width:600px){.product-image-row{grid-template-columns:32px minmax(0,1fr) 36px;gap:10px}.product-image-row>*{min-width:0}.product-image-row .image-source-tabs.compact-tabs{grid-column:2/4;display:grid;grid-template-columns:minmax(0,1fr);width:100%;min-width:0}.product-image-row .source-option{width:100%;min-width:0;max-width:100%;box-sizing:border-box}.product-image-row .source-option span{min-width:0;overflow-wrap:anywhere}.product-image-row .source-option input{flex:0 0 auto}.product-image-row .image-url-field,.product-image-row .upload-control{width:100%;min-width:0;max-width:100%}.product-image-row .upload-control input[type=file]{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box}.product-image-row .image-preview{width:min(140px,100%);max-width:100%;height:auto;min-width:0;aspect-ratio:3/4}.product-image-row .remove-image{width:36px;min-width:36px;justify-self:end}.add-image-btn{max-width:100%;white-space:normal}}
 `]
 })
@@ -600,6 +636,7 @@ export class AdminComponent {
   customers: any[] = [];
   editingCat: any = null;
   editingProduct: any = null;
+  standardSizes = ['XS','S','M','L','XL','XXL','XXXL'];
   statuses = ['Pending', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
   loadingCategories = false;
   categoryLoadError = '';
@@ -613,6 +650,10 @@ export class AdminComponent {
   dashboardOrders: any[] = [];
   expandedOrderId: number | null = null;
   statusSaving: Record<number, boolean> = {};
+  refundReferences: Record<number, string> = {};
+  refundNotes: Record<number, string> = {};
+  refundSaving: Record<number, boolean> = {};
+  refundErrors: Record<number, string> = {};
   returns: any[] = [];
   returnsLoadError = '';
   returnStatuses = ['Requested','Approved','Rejected','Received','Refunded','Cancelled'];
@@ -743,7 +784,7 @@ export class AdminComponent {
   newCategory(): void {
     this.categoryImageUploadError = '';
     this.categorySaveError = '';
-    this.editingCat = { name: '', isActive: true, imageMode: 'auto', imageUrl: null, resolvedImageUrl: null };
+    this.editingCat = { name: '', isActive: true, imageMode: 'auto', imageUrl: null, resolvedImageUrl: null, requiresSize: false, sizeOptions: [], columnText: '', guideUnit: 'in', guideRows: {} };
   }
 
   editCategory(category: any): void {
@@ -752,7 +793,12 @@ export class AdminComponent {
     this.editingCat = {
       ...category,
       imageMode: category.imageMode === 'custom' ? 'custom' : 'auto',
-      imageUrl: category.imageMode === 'custom' ? category.imageUrl : null
+      imageUrl: category.imageMode === 'custom' ? category.imageUrl : null,
+      requiresSize: category.requiresSize || false,
+      sizeOptions: category.sizeOptions || [],
+      columnText: category.sizeGuide?.columns?.join(', ') || '',
+      guideUnit: category.sizeGuide?.unit || 'in',
+      guideRows: this.toGuideRows(category.sizeGuide)
     };
   }
 
@@ -760,6 +806,30 @@ export class AdminComponent {
     if (this.editingCat?.imageMode === 'custom') this.editingCat.imageUrl = null;
     else if (this.editingCat) this.editingCat.resolvedImageUrl = null;
   }
+
+  toggleCategorySize(size: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    const sizes = this.editingCat.sizeOptions as string[];
+    this.editingCat.sizeOptions = checked ? [...sizes, size].sort((a,b)=>this.standardSizes.indexOf(a)-this.standardSizes.indexOf(b)) : sizes.filter(x=>x!==size);
+    if (!this.editingCat.guideRows[size]) this.editingCat.guideRows[size] = {};
+  }
+  columns(cat:any=this.editingCat): string[] { return (cat?.columnText || '').split(',').map((x:string)=>x.trim()).filter(Boolean); }
+  private toGuideRows(guide:any): any {
+    const rows:any={};
+    for (const [size, values] of Object.entries(guide?.rows || {})) rows[size]=Object.fromEntries((guide.columns||[]).map((col:string,i:number)=>[col,(values as any[])[i] ?? '']));
+    return rows;
+  }
+  private serializedGuideRows(cat:any): Record<string,Array<number|null>> {
+    const cols=this.columns(cat); const rows:any={};
+    for (const size of cat.sizeOptions || []) rows[size]=cols.map((col:string)=>{const value=cat.guideRows?.[size]?.[col];return value===''||value==null?null:Number(value);});
+    return rows;
+  }
+  selectedCategory(): any { return this.categories.find(c=>+c.id===+this.editingProduct?.categoryId); }
+  initializeVariants() {
+    const category=this.selectedCategory(); if(!category?.requiresSize)return;
+    this.editingProduct.sizeVariants=(category.sizeOptions||[]).map((size:string)=>this.editingProduct.sizeVariants?.find((v:any)=>v.sizeCode===size)||{sizeCode:size,stock:0,isEnabled:true});
+  }
+  variantFor(size:string):any { return this.editingProduct.sizeVariants.find((v:any)=>v.sizeCode===size); }
 
   uploadCategoryImage(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -842,7 +912,10 @@ export class AdminComponent {
       name: c.name,
       isActive: c.isActive,
       imageMode,
-      imageUrl: imageMode === 'custom' ? c.imageUrl : null
+      imageUrl: imageMode === 'custom' ? c.imageUrl : null,
+      requiresSize: !!c.requiresSize,
+      sizeOptions: c.requiresSize ? c.sizeOptions : [],
+      sizeGuide: { unit: c.guideUnit || 'in', columns: this.columns(c), rows: this.serializedGuideRows(c) }
     };
     const call = c.id
       ? this.api.updateCategory(c.id, body)
@@ -875,6 +948,7 @@ export class AdminComponent {
       images: [{ mode: 'repo', url: '', uploading: false, uploadError: '' }],
       description: '',
       isActive: true,
+      sizeVariants: [],
     };
   }
 
@@ -883,6 +957,7 @@ export class AdminComponent {
 
     this.editingProduct = {
       ...p,
+      sizeVariants: p.sizeVariants || [],
 
       images: (p.images?.length ? p.images : ['']).map((url: string) => ({
         url,
@@ -989,6 +1064,7 @@ export class AdminComponent {
           ? null
           : +p.discountPrice,
       stock: +p.stock,
+      sizeVariants: (this.selectedCategory()?.requiresSize ? (p.sizeVariants || []).map((v:any)=>({sizeCode:v.sizeCode,stock:+v.stock,isEnabled:!!v.isEnabled})) : []),
       description: p.description,
       isActive: p.isActive,
       imageUrls
@@ -1047,6 +1123,15 @@ export class AdminComponent {
         this.statusSaving[o.id] = false;
         alert(this.errorMessage(err, 'Unable to update the order status.'));
       }
+    });
+  }
+
+  resolveRefund(o: any) {
+    this.refundErrors[o.id] = '';
+    this.refundSaving[o.id] = true;
+    this.api.resolvePaidNeedsRefund(o.id, (this.refundReferences[o.id] || '').trim(), (this.refundNotes[o.id] || '').trim()).subscribe({
+      next: () => { this.refundSaving[o.id] = false; this.loadOrders(); this.loadDashboard(); },
+      error: err => { this.refundSaving[o.id] = false; this.refundErrors[o.id] = this.errorMessage(err, 'Unable to record the refund reference.'); }
     });
   }
 }

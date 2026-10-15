@@ -68,23 +68,23 @@ export class ApiService {
     return this.http.get<CartItem[]>(`${this.base}/cart`);
   }
 
-  addCartItem(productId: number, quantity = 1) {
-    return this.http.post<CartItem>(`${this.base}/cart/items`, { productId, quantity });
+  addCartItem(productId: number, quantity = 1, sizeCode: string | null = null) {
+    return this.http.post<CartItem>(`${this.base}/cart/items`, { productId, quantity, sizeCode });
   }
 
-  updateCartItem(productId: number, quantity: number) {
-    return this.http.put<CartItem>(`${this.base}/cart/items/${productId}`, { quantity });
+  updateCartItem(productId: number, quantity: number, sizeCode: string | null = null) {
+    return this.http.put<CartItem>(`${this.base}/cart/items/${productId}`, { quantity, sizeCode });
   }
 
-  removeCartItem(productId: number) {
-    return this.http.delete(`${this.base}/cart/items/${productId}`);
+  removeCartItem(productId: number, sizeCode: string | null = null) {
+    return this.http.delete(`${this.base}/cart/items/${productId}`, { params: sizeCode ? { sizeCode } : {} });
   }
 
   clearCart() {
     return this.http.delete(`${this.base}/cart`);
   }
 
-  syncCart(items: Array<{ productId: number; quantity: number }>) {
+  syncCart(items: Array<{ productId: number; quantity: number; sizeCode?: string|null }>) {
     return this.http.post<CartItem[]>(`${this.base}/cart/sync`, items);
   }
 
@@ -203,5 +203,9 @@ export class ApiService {
 
   updateOrderStatus(id: number, status: string) {
     return this.http.put(`${this.base}/admin/orders/${id}/status`, { status });
+  }
+
+  resolvePaidNeedsRefund(id: number, refundReference: string, note: string) {
+    return this.http.put(`${this.base}/admin/orders/${id}/refund-resolution`, { refundReference, note });
   }
 }

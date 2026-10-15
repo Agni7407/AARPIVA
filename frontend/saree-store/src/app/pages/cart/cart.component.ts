@@ -26,14 +26,16 @@ import { ApiService } from '../../core/api.service';
                 <h3>{{item.product.name}}</h3>
               </a>
               <p>{{cart.price(item.product)|currency:'INR':'symbol':'1.0-0'}}</p>
+              <p *ngIf="item.sizeCode"><strong>Size:</strong> {{item.sizeCode}}</p>
+              <p *ngIf="stock(item)<=0" class="stock-unavailable">Temporarily unavailable. Your bag line is saved.</p>
             </div>
             <div class="qty">
-              <button type="button" (click)="cart.setQuantity(item.productId,item.quantity-1)">−</button>
+              <button type="button" (click)="cart.setQuantity(item.productId,item.quantity-1,item.sizeCode||null)">−</button>
               <span>{{item.quantity}}</span>
-              <button type="button" [disabled]="item.quantity>=item.product.stock" (click)="cart.setQuantity(item.productId,item.quantity+1)">+</button>
+              <button type="button" [disabled]="item.quantity>=stock(item)" (click)="cart.setQuantity(item.productId,item.quantity+1,item.sizeCode||null)">+</button>
             </div>
             <b>{{cart.price(item.product)*item.quantity|currency:'INR':'symbol':'1.0-0'}}</b>
-            <button class="remove" type="button" (click)="cart.remove(item.productId)">×</button>
+            <button class="remove" type="button" (click)="cart.remove(item.productId,item.sizeCode||null)">×</button>
           </div>
         </div>
 
@@ -43,7 +45,7 @@ import { ApiService } from '../../core/api.service';
           <p class="sum"><span>Shipping</span><b>{{shipping===0?'Free':(shipping|currency:'INR':'symbol':'1.0-0')}}</b></p>
           <hr>
           <p class="sum total"><span>Total</span><b>{{total|currency:'INR':'symbol':'1.0-0'}}</b></p>
-          <button type="button" class="btn dark full" (click)="proceedToCheckout()">Proceed to Checkout</button>
+          <button type="button" class="btn dark full" [disabled]="!canCheckout" (click)="proceedToCheckout()">Proceed to Checkout</button>
         </aside>
       </div>
 
@@ -72,6 +74,8 @@ export class CartComponent {
   get total() {
     return this.cart.subtotal + this.shipping;
   }
+  stock(item:any) { return item.product.requiresSize ? (item.product.sizeVariants?.find((v:any)=>v.sizeCode===item.sizeCode)?.stock||0) : item.product.stock; }
+  get canCheckout() { return this.cart.items.every(item=>this.stock(item)>0); }
   proceedToCheckout() {
     this.router.navigate(['/checkout']);
   }

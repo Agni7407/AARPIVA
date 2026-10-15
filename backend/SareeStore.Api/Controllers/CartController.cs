@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SareeStore.Api.Data;
 using SareeStore.Api.DTOs;
 using SareeStore.Api.Models;
+using SareeStore.Api.Services;
 
 namespace SareeStore.Api.Controllers;
 
@@ -20,13 +21,16 @@ public class CartController(AppDbContext db) : ControllerBase
                 .ThenInclude(x => x.Category)
             .Include(x => x.Product)
                 .ThenInclude(x => x.Images)
+            .Include(x => x.Product)
+                .ThenInclude(x => x.SizeVariants)
             .OrderBy(x => x.Id)
             .ToListAsync();
 
         var changed = false;
         foreach (var item in items.ToList())
         {
-            if (!item.Product.IsActive || item.Product.Stock <= 0)
+            var stock = AvailableStock(item);
+            if (!item.Product.IsActive)
             {
                 db.CartItems.Remove(item);
                 items.Remove(item);
@@ -34,9 +38,9 @@ public class CartController(AppDbContext db) : ControllerBase
                 continue;
             }
 
-            if (item.Quantity > item.Product.Stock)
+            if (stock > 0 && item.Quantity > stock)
             {
-                item.Quantity = item.Product.Stock;
+                item.Quantity = stock;
                 item.UpdatedAt = DateTime.UtcNow;
                 changed = true;
             }
@@ -53,19 +57,27 @@ public class CartController(AppDbContext db) : ControllerBase
         var product = await db.Products
             .Include(x => x.Category)
             .Include(x => x.Images)
+            .Include(x => x.SizeVariants)
             .FirstOrDefaultAsync(x => x.Id == req.ProductId);
 
         if (product is null || !product.IsActive) return BadRequest("Product is unavailable.");
-        if (product.Stock <= 0) return BadRequest("Product is out of stock.");
+        var sizeCode = (req.SizeCode ?? "").Trim().ToUpperInvariant();
+        if ((!product.Category.RequiresSize && sizeCode.Length != 0) || (product.Category.RequiresSize && !product.SizeVariants.Any(v => v.SizeCode == sizeCode))) return BadRequest("Invalid size selection.");
+        var configuredSizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(product.Category.SizeOptionsJson) ?? [];
+        if (product.Category.RequiresSize && !configuredSizes.Contains(sizeCode)) return BadRequest("Invalid size selection.");
+        var stock = product.Category.RequiresSize ? product.SizeVariants.FirstOrDefault(v => v.SizeCode == sizeCode && v.IsEnabled)?.Stock ?? 0 : product.Stock;
+        if (product.Category.RequiresSize && string.IsNullOrEmpty(sizeCode)) return BadRequest("Select a size.");
+        if (stock <= 0) return BadRequest("Selected size is unavailable.");
 
-        var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == req.ProductId);
+        var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == req.ProductId && x.SizeCode == sizeCode);
         if (item is null)
         {
             item = new CartItem
             {
                 UserId = userId,
                 ProductId = product.Id,
-                Quantity = Math.Min(req.Quantity, product.Stock),
+                SizeCode = sizeCode,
+                Quantity = Math.Min(req.Quantity, stock),
                 Product = product
             };
             db.CartItems.Add(item);
@@ -73,8 +85,8 @@ public class CartController(AppDbContext db) : ControllerBase
         else
         {
             item.Product = product;
-            if (item.Quantity + req.Quantity > product.Stock)
-                return BadRequest($"Only {product.Stock} item(s) are available.");
+            if (item.Quantity + req.Quantity > stock)
+                return BadRequest($"Only {stock} item(s) are available for the selected size.");
             item.Quantity += req.Quantity;
             item.UpdatedAt = DateTime.UtcNow;
         }
@@ -92,11 +104,14 @@ public class CartController(AppDbContext db) : ControllerBase
                 .ThenInclude(x => x.Category)
             .Include(x => x.Product)
                 .ThenInclude(x => x.Images)
-            .FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == productId);
+            .Include(x => x.Product).ThenInclude(x => x.SizeVariants)
+            .FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == productId && x.SizeCode == (req.SizeCode ?? ""));
 
         if (item is null) return NotFound("Cart item not found.");
         if (!item.Product.IsActive) return BadRequest("Product is unavailable.");
-        if (item.Product.Stock < req.Quantity) return BadRequest($"Only {item.Product.Stock} item(s) are available.");
+        var stock = AvailableStock(item);
+        if (item.Product.Category.RequiresSize && item.Product.Category.SizeOptionsJson.Length > 0 && !System.Text.Json.JsonSerializer.Deserialize<List<string>>(item.Product.Category.SizeOptionsJson)!.Contains(item.SizeCode)) return BadRequest("This size is no longer offered.");
+        if (stock < req.Quantity) return BadRequest($"Only {stock} item(s) are available for the selected size.");
 
         item.Quantity = req.Quantity;
         item.UpdatedAt = DateTime.UtcNow;
@@ -108,7 +123,7 @@ public class CartController(AppDbContext db) : ControllerBase
     public async Task<ActionResult> Remove(int productId)
     {
         var userId = ApiHelper.UserId(User);
-        var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == productId);
+        var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == productId && x.SizeCode == (Request.Query["sizeCode"].ToString() ?? ""));
         if (item is null) return NoContent();
         db.CartItems.Remove(item);
         await db.SaveChangesAsync();
@@ -135,36 +150,41 @@ public class CartController(AppDbContext db) : ControllerBase
         if (lines.Count > 100) return BadRequest("Too many cart items.");
 
         var userId = ApiHelper.UserId(User);
-        var requested = lines
-            .GroupBy(x => x.ProductId)
-            .ToDictionary(x => x.Key, x => x.Sum(v => v.Quantity));
+        var requested = CartLineGrouping.Group(lines);
 
-        var productIds = requested.Keys.ToList();
+        var productIds = requested.Keys.Select(x => x.ProductId).Distinct().ToList();
         var products = await db.Products
             .Include(x => x.Category)
             .Include(x => x.Images)
+            .Include(x => x.SizeVariants)
             .Where(x => productIds.Contains(x.Id) && x.IsActive)
             .ToListAsync();
 
-        foreach (var (productId, quantity) in requested)
+        foreach (var (key, quantity) in requested)
         {
-            var product = products.FirstOrDefault(x => x.Id == productId);
-            if (product is null || product.Stock <= 0) continue;
+            var product = products.FirstOrDefault(x => x.Id == key.ProductId);
+            if (product is null) continue;
+            var stock = product.Category.RequiresSize ? product.SizeVariants.FirstOrDefault(v => v.SizeCode == key.SizeCode && v.IsEnabled)?.Stock ?? 0 : product.Stock;
+            var configuredSizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(product.Category.SizeOptionsJson) ?? [];
+            if (product.Category.RequiresSize && !configuredSizes.Contains(key.SizeCode)) continue;
+            if (!product.Category.RequiresSize && key.SizeCode.Length > 0) continue;
+            if ((product.Category.RequiresSize && key.SizeCode == "") || stock <= 0) continue;
 
-            var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == productId);
-            var target = Math.Min(quantity, product.Stock);
+            var item = await db.CartItems.FirstOrDefaultAsync(x => x.UserId == userId && x.ProductId == key.ProductId && x.SizeCode == key.SizeCode);
+            var target = Math.Min(quantity, stock);
             if (item is null)
             {
                 db.CartItems.Add(new CartItem
                 {
                     UserId = userId,
-                    ProductId = productId,
+                    ProductId = key.ProductId,
+                    SizeCode = key.SizeCode,
                     Quantity = target
                 });
             }
             else
             {
-                item.Quantity = Math.Min(item.Quantity + target, product.Stock);
+                item.Quantity = Math.Min(item.Quantity + target, stock);
                 item.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -188,9 +208,18 @@ public class CartController(AppDbContext db) : ControllerBase
                 item.Product.DiscountPrice,
                 item.Product.Stock,
                 item.Product.IsActive,
-                item.Product.Images.OrderByDescending(i => i.IsPrimary).Select(i => i.ImageUrl).ToList()
-            )
+                item.Product.Images.OrderByDescending(i => i.IsPrimary).Select(i => i.ImageUrl).ToList(), item.Product.Category.RequiresSize,
+                System.Text.Json.JsonSerializer.Deserialize<List<string>>(item.Product.Category.SizeOptionsJson) ?? [],
+                item.Product.SizeVariants.Select(v => new ProductVariantResponse(v.SizeCode, v.Stock, v.IsEnabled, v.Stock > 0 && v.IsEnabled)).ToList(), item.Product.Category.SizeGuideJson
+            ), item.SizeCode
         );
+
+    private static int AvailableStock(CartItem item)
+    {
+        if (!item.Product.Category.RequiresSize) return item.Product.Stock;
+        var sizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(item.Product.Category.SizeOptionsJson) ?? [];
+        return sizes.Contains(item.SizeCode) ? item.Product.SizeVariants.FirstOrDefault(v => v.SizeCode == item.SizeCode && v.IsEnabled)?.Stock ?? 0 : 0;
+    }
 }
 
-public record AddCartItemRequest([System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)] int ProductId, [System.ComponentModel.DataAnnotations.Range(1, 50)] int Quantity);
+public record AddCartItemRequest([System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)] int ProductId, [System.ComponentModel.DataAnnotations.Range(1, 50)] int Quantity, string? SizeCode = null);

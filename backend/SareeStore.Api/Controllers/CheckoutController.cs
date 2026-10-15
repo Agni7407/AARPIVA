@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SareeStore.Api.Data;
 using SareeStore.Api.DTOs;
+using SareeStore.Api.Services;
 
 namespace SareeStore.Api.Controllers;
 
@@ -19,13 +20,10 @@ public class CheckoutController(AppDbContext db) : ControllerBase
             .ToListAsync();
 
         var subtotal = cartItems.Sum(x => (x.Product.DiscountPrice ?? x.Product.Price) * x.Quantity);
-        var discountAmount = cartItems.Sum(x => Math.Max(0m, x.Product.Price - (x.Product.DiscountPrice ?? x.Product.Price)) * x.Quantity);
-        var deliveryCharge = await db.AppSettings
-            .Where(x => x.Key == "DeliveryCharge")
-            .Select(x => x.Value)
-            .FirstOrDefaultAsync();
-
-        var total = subtotal - discountAmount + deliveryCharge;
-        return Ok(new CheckoutSummaryResponse(subtotal, discountAmount, deliveryCharge, total));
+        var settings = await db.AppSettings.Where(x => x.Key == "DeliveryCharge" || x.Key == "FreeDeliveryThreshold").ToListAsync();
+        var configuredCharge = settings.FirstOrDefault(x => x.Key == "DeliveryCharge")?.Value ?? 99m;
+        var freeThreshold = settings.FirstOrDefault(x => x.Key == "FreeDeliveryThreshold")?.Value ?? 1499m;
+        var deliveryCharge = DeliveryPricing.Charge(subtotal, configuredCharge, freeThreshold);
+        return Ok(new CheckoutSummaryResponse(subtotal, 0m, deliveryCharge, subtotal + deliveryCharge));
     }
 }
