@@ -261,6 +261,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
+    .AllowAnonymous();
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())
